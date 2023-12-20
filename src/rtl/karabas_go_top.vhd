@@ -173,7 +173,6 @@ port map(
 	RGB_O => osd_rgb,
 	HCNT_I => hcnt,
 	VCNT_I => vcnt,
-	OSD_OVERLAY => '1',
 	OSD_COMMAND => osd_command
 );
 
@@ -213,7 +212,6 @@ port map(
 	
 	SOFT_SW => open,
 	
-	OSD_OVERLAY => open,
 	OSD_COMMAND => osd_command
 );
 

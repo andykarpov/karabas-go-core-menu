@@ -50,8 +50,7 @@ entity mcu is
 	 -- soft switches
 	 SOFT_SW 	: out std_logic_vector(63 downto 0) := (others => '0');
 
-    -- osd	 
-	 OSD_OVERLAY: out std_logic := '0';
+    -- osd
 	 OSD_COMMAND: out std_logic_vector(15 downto 0)
 	 
 	);

@@ -15,7 +15,6 @@ entity overlay is
 		HCNT_I	: in std_logic_vector(11 downto 0);
 		VCNT_I	: in std_logic_vector(11 downto 0);
 		
-		OSD_OVERLAY 	: in std_logic := '0';
 		OSD_COMMAND 	: in std_logic_vector(15 downto 0)
 	);
 end entity;
@@ -34,7 +33,7 @@ architecture rtl of overlay is
     signal row_addr: std_logic_vector(2 downto 0);
     signal bit_addr: std_logic_vector(2 downto 0);
     signal font_word: std_logic_vector(7 downto 0);
-    signal font_reg : std_logic_vector(7 downto 0);	 
+    signal font_reg : std_logic_vector(15 downto 0);	 
     signal pixel: std_logic;
 	 signal pixel_reg: std_logic;
     
@@ -57,6 +56,9 @@ architecture rtl of overlay is
 	 
 	 signal hcnt : std_logic_vector(11 downto 0) := (others => '0');
 	 signal vcnt : std_logic_vector(11 downto 0) := (others => '0');
+	 
+	 signal osd_overlay: std_logic := '0';
+	 signal osd_popup: std_logic := '0';
 	 
 	 constant paper_start_h : natural := 0;
 	 constant paper_end_h : natural := 8*32; -- 32 characters in a row
@@ -98,50 +100,42 @@ begin
 	 
 	 paper2 <= '1' when hcnt >= paper_start_h and hcnt < paper_end_h and vcnt >= paper_start_v and vcnt < paper_end_v else '0'; 
 	 paper <= '1' when hcnt >= paper_start_h + 8 and hcnt < paper_end_h + 8 and vcnt >= paper_start_v and vcnt < paper_end_v else '0'; --        (8 px)
-    video_on <= '1' when OSD_OVERLAY = '1' else '0';
+    video_on <= '1' when osd_overlay = '1' else '0';
 	 
-	 --         
-	 --    
 	 process (CLK, vram_do)
 	 begin
 		if (rising_edge(CLK)) then 
-			case (char_x) is
-				when "110" =>
-					--     char  attr   
-					if (paper2 = '1') then
+			case (hcnt(2 downto 0)) is
+				when "101" =>
+					--if (paper2 = '1') then
 						addr_read <= VCNT(7 downto 3) & HCNT(7 downto 3);
-					end if;
-				when "111" => 
-					--       
+					--end if;
+				when "110" => 
 					attr2 <= vram_do(7 downto 0);
-				when "000" => 
-					--  attr    
-					attr <= attr2;
-					when others => null;						
+					rom_addr <= vram_do(15 downto 8) & char_y;
+				when "111" =>
+					--attr <= attr2;
+				when others => null;						
 			end case;
+			
+			if (hcnt_i(3 downto 0) = "1111") then 
+				attr <= attr2;
+				font_reg <= font_word(7) & font_word(7) & 
+								font_word(6) & font_word(6) & 
+								font_word(5) & font_word(5) & 
+								font_word(4) & font_word(4) & 
+								font_word(3) & font_word(3) & 
+								font_word(2) & font_word(2) & 
+								font_word(1) & font_word(1) & 
+								font_word(0) & font_word(0);
+			else 
+				font_reg <= font_reg(14 downto 0) & '0';				
+			end if;
+			
 		end if;
 	 end process;
 	 
-	 rom_addr <= vram_do(15 downto 8) & char_y when char_x = "111" else rom_addr;
-	 font_reg <= font_word;	 
-    bit_addr <= char_x(2 downto 0);
-
-    pixel <= 
-                font_reg(6) when bit_addr = "000" else 
-                font_reg(5) when bit_addr = "001" else 
-                font_reg(4) when bit_addr = "010" else 
-                font_reg(3) when bit_addr = "011" else 
-                font_reg(2) when bit_addr = "100" else 
-                font_reg(1) when bit_addr = "101" else
-                font_reg(0) when bit_addr = "110" else
-                font_reg(7) when bit_addr = "111";
-
-	 process(CLK)
-	 begin 
-		if (rising_edge(CLK)) then
-			pixel_reg <= pixel;
-		end if;
-	 end process;
+	 pixel_reg <= font_reg(15);
 	 
     --  RGB
     is_flash <= '1' when attr(3 downto 0) = "0001" else '0';
@@ -169,6 +163,8 @@ begin
 					 if (osd_command /= last_osd_command) then 
 						last_osd_command <= osd_command;
 						case osd_command(15 downto 8) is 
+						  when x"01" => vram_wr <= "0"; osd_overlay <= osd_command(0); -- osd
+						  when x"02" => vram_wr <= "0"; osd_popup <= osd_command(0); -- popup
 						  when X"10"  => vram_wr <= "0"; addr_write(4 downto 0) <= osd_command(4 downto 0); -- x: 0...32
 						  when X"11" => vram_wr <= "0"; addr_write(9 downto 5) <= osd_command(4 downto 0); -- y: 0...32
 						  when X"12"  => vram_wr <= "0"; char_buf <= osd_command(7 downto 0); -- char
