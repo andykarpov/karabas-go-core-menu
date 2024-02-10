@@ -86,6 +86,12 @@ signal clk_vga		: std_logic;
 signal osd_rgb : std_logic_vector(23 downto 0);
 signal osd_command: std_logic_vector(15 downto 0);
 
+signal ft_spi_on : std_logic := '0';
+signal ft_vga_on : std_logic := '0';
+signal ft_cs_n   : std_logic := '1';
+signal ft_sck    : std_logic := '1';
+signal ft_mosi   : std_logic := '1';
+
   component ODDR2
   port(
           D0	: in std_logic;
@@ -129,9 +135,6 @@ SD_CLK <= '1';
 SD_CS_N <= '1';
 FDC_DRIVE <= "00";
 FDC_MOTOR <= '0';
-FT_SPI_CS_N <= '1';
-FT_SPI_SCK <= '0';
-FT_OE_N <= '1';
 
 -- PLL
 pll0_inst: entity work.pll 
@@ -190,7 +193,8 @@ port map(
 	MS_X => open,
 	MS_Y => open,
 	MS_Z => open,
-	MS_BTNS => open,
+	MS_B => open,
+	MS_UPD => open,
 	
 	KB_STATUS => open,
 	KB_DAT0 => open,
@@ -202,7 +206,6 @@ port map(
 	
 	JOY_L => open,
 	JOY_R => open,
-	JOY_USB => open,
 	
 	RTC_A => (others => '0'),
 	RTC_DI => (others => '0'),
@@ -210,9 +213,34 @@ port map(
 	RTC_CS => '0',
 	RTC_WR_N => '1',
 	
-	SOFT_SW => open,
+	OSD_COMMAND => osd_command,
+	SOFTSW_COMMAND => open,
 	
-	OSD_COMMAND => osd_command
+	UART_RX_DATA => open,
+	UART_RX_IDX => open,
+	 
+	UART_TX_DATA => (others => '0'),
+	UART_TX_WR	=> '0',
+	UART_TX_MODE => '0',
+	 
+	UART_DLM => (others => '0'),
+	UART_DLL => (others => '0'),
+	UART_DLM_WR => '0',
+	UART_DLL_WR => '0',
+	 
+	ROMLOADER_ACTIVE => open,
+	ROMLOAD_ADDR => open,
+	ROMLOAD_DATA => open,
+	ROMLOAD_WR => open,
+	
+	FT_SPI_ON => ft_spi_on,
+	FT_VGA_ON => ft_vga_on,
+	FT_CS_N => ft_cs_n,
+	FT_MOSI => ft_mosi,
+	FT_MISO => FT_SPI_MISO,
+	FT_SCK => ft_sck,
+
+	BUSY => open
 );
 
 red	<= (hcnt(7 downto 0) + shift) and "11111111";
@@ -224,6 +252,12 @@ VGA_G <= osd_rgb(15 downto 8) when blank = '0' else "00000000";
 VGA_B <= osd_rgb(7 downto 0) when blank = '0' else "00000000";
 VGA_HS <= hsync;
 VGA_VS <= vsync;
+
+-- ft812 exclusive access by mcu
+FT_SPI_CS_N <= ft_cs_n when ft_spi_on = '1' else '1';
+FT_SPI_SCK <= ft_sck when ft_spi_on = '1' else '0';
+FT_SPI_MOSI <= ft_mosi when ft_spi_on = '1' else '1';
+FT_OE_N <= '0' when ft_vga_on = '1' else '1';
 
 end Behavioral;
 
