@@ -5,29 +5,35 @@ use IEEE.numeric_std.all;
 
 entity karabas_go is
     Port ( CLK_50MHZ : in  STD_LOGIC;
+
            TAPE_IN : in  STD_LOGIC;
            TAPE_OUT : out  STD_LOGIC;
            BEEPER : out  STD_LOGIC;
+
            DAC_LRCK : out  STD_LOGIC;
            DAC_DAT : out  STD_LOGIC;
            DAC_BCK : out  STD_LOGIC;
            DAC_MUTE : out  STD_LOGIC;
-           ESP_RESET_N : out  STD_LOGIC;
-           ESP_BOOT_N : out  STD_LOGIC;
-           UART_RX : inout  STD_LOGIC;
+           
+			  ESP_RESET_N : out  STD_LOGIC;
+           ESP_BOOT_N : out  STD_LOGIC;           
+			  UART_RX : inout  STD_LOGIC;
            UART_TX : inout  STD_LOGIC;
            UART_CTS : out  STD_LOGIC;
-           WA : out  STD_LOGIC_VECTOR (2 downto 0);
+           
+			  WA : out  STD_LOGIC_VECTOR (2 downto 0);
            WCS_N : out  STD_LOGIC_VECTOR(1 downto 0);
            WRD_N : out  STD_LOGIC;
            WWR_N : out  STD_LOGIC;
            WRESET_N : out  STD_LOGIC;
            WD : inout  STD_LOGIC_VECTOR (15 downto 0);
-           MA : out  STD_LOGIC_VECTOR (20 downto 0);
+           
+			  MA : out  STD_LOGIC_VECTOR (20 downto 0);
            MD : inout  STD_LOGIC_VECTOR (15 downto 0);
            MWR_N : out  STD_LOGIC_VECTOR (1 downto 0);
            MRD_N : out  STD_LOGIC_VECTOR (1 downto 0);
-           SDR_BA : out  STD_LOGIC_VECTOR (1 downto 0);
+           
+			  SDR_BA : out  STD_LOGIC_VECTOR (1 downto 0);
            SDR_A : out  STD_LOGIC_VECTOR (12 downto 0);
            SDR_CLK : out  STD_LOGIC;
            SDR_DQM : out  STD_LOGIC_VECTOR (1 downto 0);
@@ -35,12 +41,14 @@ entity karabas_go is
            SDR_CAS_N : out  STD_LOGIC;
            SDR_RAS_N : out  STD_LOGIC;
            SDR_DQ : inout  STD_LOGIC_VECTOR (15 downto 0);
-           SD_CS_N : out  STD_LOGIC;
+           
+			  SD_CS_N : out  STD_LOGIC;
            SD_DI : inout  STD_LOGIC;
            SD_DO : inout  STD_LOGIC;
            SD_CLK : out  STD_LOGIC;
            SD_DET_N : in  STD_LOGIC;
-           FDC_INDEX : inout  STD_LOGIC;
+           
+			  FDC_INDEX : inout  STD_LOGIC;
            FDC_DRIVE : out  STD_LOGIC_VECTOR (1 downto 0);
            FDC_MOTOR : out  STD_LOGIC;
            FDC_DIR : inout  STD_LOGIC;
@@ -51,20 +59,23 @@ entity karabas_go is
            FDC_WPRT : inout  STD_LOGIC;
            FDC_RDATA : inout  STD_LOGIC;
            FDC_SIDE_N : inout  STD_LOGIC;
-           FT_SPI_CS_N : out  STD_LOGIC;
+           
+			  FT_SPI_CS_N : out  STD_LOGIC;
            FT_SPI_SCK : out  STD_LOGIC;
-           FT_SPI_MISO : inout  STD_LOGIC;
-           FT_SPI_MOSI : inout  STD_LOGIC;
-           FT_INT_N : inout  STD_LOGIC;
-           FT_CLK : inout  STD_LOGIC;
+           FT_SPI_MISO : in  STD_LOGIC;
+           FT_SPI_MOSI : out  STD_LOGIC;
+           FT_INT_N : in  STD_LOGIC;
+           FT_CLK : in  STD_LOGIC;
            FT_OE_N : out  STD_LOGIC;
+			  
            VGA_R : out  STD_LOGIC_VECTOR (7 downto 0);
            VGA_G : out  STD_LOGIC_VECTOR (7 downto 0);
            VGA_B : out  STD_LOGIC_VECTOR (7 downto 0);
            VGA_HS : out  STD_LOGIC;
            VGA_VS : out  STD_LOGIC;
            V_CLK : out  STD_LOGIC;
-           MCU_CS_N : in  STD_LOGIC;
+           
+			  MCU_CS_N : in  STD_LOGIC;
            MCU_SCK : in  STD_LOGIC;
            MCU_MOSI : in  STD_LOGIC;
            MCU_MISO : out  STD_LOGIC);
@@ -82,6 +93,8 @@ signal red		: std_logic_vector(7 downto 0);
 signal green		: std_logic_vector(7 downto 0);
 signal blue		: std_logic_vector(7 downto 0);
 signal clk_vga		: std_logic;
+signal locked : std_logic;
+signal areset 		: std_logic;
 
 signal osd_rgb : std_logic_vector(23 downto 0);
 signal osd_command: std_logic_vector(15 downto 0);
@@ -140,8 +153,11 @@ FDC_MOTOR <= '0';
 pll0_inst: entity work.pll 
 port map(
 	CLK_IN1 => CLK_50MHZ,
-	CLK_OUT1 => clk_vga
+	CLK_OUT1 => clk_vga,
+	LOCKED => locked
 );
+
+areset <= not locked;
 
 -- V_CLK buf
 ODDR2_inst: ODDR2
@@ -183,7 +199,7 @@ port map(
 mcu_inst: entity work.mcu
 port map(
 	CLK => clk_vga,
-	N_RESET => '1',
+	N_RESET => not areset,
 	
 	MCU_MOSI => MCU_MOSI,
 	MCU_MISO => MCU_MISO,
@@ -235,10 +251,10 @@ port map(
 	
 	FT_SPI_ON => ft_spi_on,
 	FT_VGA_ON => ft_vga_on,
-	FT_CS_N => ft_cs_n,
-	FT_MOSI => ft_mosi,
+	FT_CS_N => FT_SPI_CS_N,
+	FT_MOSI => FT_SPI_MOSI,
 	FT_MISO => FT_SPI_MISO,
-	FT_SCK => ft_sck,
+	FT_SCK => FT_SPI_SCK,
 
 	BUSY => open
 );
@@ -254,9 +270,6 @@ VGA_HS <= hsync;
 VGA_VS <= vsync;
 
 -- ft812 exclusive access by mcu
-FT_SPI_CS_N <= ft_cs_n when ft_spi_on = '1' else '1';
-FT_SPI_SCK <= ft_sck when ft_spi_on = '1' else '0';
-FT_SPI_MOSI <= ft_mosi when ft_spi_on = '1' else '1';
 FT_OE_N <= '0' when ft_vga_on = '1' else '1';
 
 end Behavioral;

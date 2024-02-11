@@ -152,20 +152,45 @@ architecture rtl of mcu is
 	signal qstate : qmachine := idle;
 	
 	-- ft command
-	signal ft_cmd : std_logic_vector(23 downto 0);
+	signal ft_cmd : std_logic_vector(23 downto 0) := (others => '0');
 	signal ft_cmd_wr : std_logic := '0';
 
-	-- ft transaction
-	signal ft_transaction_len : std_logic_vector(7 downto 0);
-	signal ft_addr : std_logic_vector(31 downto 0);
-	signal ft_buf_a : std_logic_vector(7 downto 0);
-	signal ft_buf_di : std_logic_vector(7 downto 0);
-	signal ft_buf_wr : std_logic := '0';
+	-- ft data transaction
+	signal ft_transaction_len : std_logic_vector(7 downto 0) := (others => '0');
+	signal ft_addr : std_logic_vector(31 downto 0) := (others => '0');
+	signal ft_tx_data : std_logic_vector(2047 downto 0); -- 255 bytes
 	signal ft_transaction_wr : std_logic := '0';
+	signal ft_rx_data : std_logic_vector(2047 downto 0); -- 255 bytes
 		 
-	signal ft_spi_ss_n : std_logic_vector(0 downto 0);
-	signal ft_spi_busy : std_logic;
-	signal ft_rx_data : std_logic_vector(23 downto 0);
+	-- ft spi
+	signal ft_spi_di_bus		: std_logic_vector(7 downto 0);
+	signal ft_spi_do_bus		: std_logic_vector(7 downto 0);
+	signal ft_spi_busy		: std_logic := '0';
+	signal ft_spi_busy_prev : std_logic := '0';
+	signal ft_spi_wren 		: std_logic := '0';
+	signal ft_spi_wrack		: std_logic := '0';
+	signal ft_spi_di_req		: std_logic := '0';
+	signal prev_ft_spi_di_req : std_logic := '0';
+	signal ft_spi_do_valid  : std_logic := '0';
+	signal prev_ft_spi_do_valid : std_logic := '0';
+	signal ft_spi_ss_n : std_logic_vector(0 downto 0) := "1";
+	signal ft_spi_sck_ena : std_logic := '0';
+	
+	type fmachine IS( -- ft state machine
+		ft_idle, 
+		cmd_send_cmd,
+		ack_cmd,
+		cmd_send_data,
+		ack_data	
+	);
+
+	signal fstate 			: fmachine := ft_idle; -- current state
+
+	signal ft_queue_wr : std_logic := '0';
+	signal ft_queue_ack_wr : std_logic := '0';
+	signal ft_queue_data : std_logic_vector(15 downto 0);
+	signal ft_queue_ack_data : std_logic_vector(15 downto 0);
+	signal prev_ft_queue_data : std_logic_vector(15 downto 0);
 		 
 begin
 	
@@ -219,7 +244,6 @@ begin
 		if (rising_edge(CLK)) then
 		
 			ft_cmd_wr <= '0';
-			ft_buf_wr <= '0';
 			ft_transaction_wr <= '0';
 		
 			if spi_do_valid = '1' then
@@ -322,6 +346,7 @@ begin
 					-- ft812
 					when CMD_FT => 
 						case spi_do(15 downto 8) is
+							
 							-- control spi, vga
 							when x"00" => 
 								FT_SPI_ON <= spi_do(0);
@@ -330,24 +355,22 @@ begin
 							-- command register
 							when x"01" => ft_cmd(23 downto 16) <= spi_do(7 downto 0);
 							when x"02" => ft_cmd(15 downto 8) <= spi_do(7 downto 0);
-							when x"03" => ft_cmd(7 downto 0) <= spi_do(7 downto 0); ft_cmd_wr <= '1'; -- todo: trigger cmd execution from here
+							when x"03" => ft_cmd(7 downto 0) <= spi_do(7 downto 0); ft_cmd_wr <= '1'; -- trigger cmd execution from here
 							
 							-- transaction length, address
 							when x"04" => ft_transaction_len(7 downto 0) <= spi_do(7 downto 0);
 							when x"05" => ft_addr(31 downto 24) <= spi_do(7 downto 0);
 							when x"06" => ft_addr(23 downto 16) <= spi_do(7 downto 0);
 							when x"07" => ft_addr(15 downto 8) <= spi_do(7 downto 0);
-							when x"08" => ft_addr(7 downto 0) <= spi_do(7 downto 0); -- todo: trigger ft transaction from here
+							when x"08" => ft_addr(7 downto 0) <= spi_do(7 downto 0); 
 							when others => null;
 						end case;
 						
-					-- ft812 transaction data
+					-- ft812 transaction data to send (or dummy bytes while receive)
 					when CMD_FT_DATA => 
-						ft_buf_a <= spi_do(15 downto 8);
-						ft_buf_di <= spi_do(7 downto 0);
-						ft_buf_wr <= '1';
-						if (ft_transaction_len = spi_do(15 downto 8)) then
-							ft_transaction_wr <= '1';
+						ft_tx_data(8*to_integer(unsigned(spi_do(15 downto 8)))+7 downto 8*to_integer(unsigned(spi_do(15 downto 8)))) <= spi_do(7 downto 0);
+						if (ft_transaction_len-1 = spi_do(15 downto 8)) then
+							ft_transaction_wr <= '1'; -- trigger ft transaction from here, when the last byte was received
 						end if;
 
 					-- init start
@@ -435,7 +458,14 @@ begin
 	begin
 		if rising_edge(CLK) then
 			queue_wr_req <= '0';
-			if UART_TX_WR = '1' then -- send UART byte
+			if ft_queue_ack_wr = '1' then -- send FT ack
+				queue_wr_req <= '1';
+				queue_di <= CMD_FT & ft_queue_ack_data;
+			elsif ft_queue_wr = '1' and prev_ft_queue_data /= ft_queue_data then -- send FT received byte
+				prev_ft_queue_data <= ft_queue_data;
+				queue_wr_req <= '1';
+				queue_di <= CMD_FT_DATA & ft_queue_data;
+			elsif UART_TX_WR = '1' then -- send UART byte
 				queue_wr_req <= '1';
 				if (UART_TX_MODE = '1') then
 					queue_di <= CMD_UART & "00000011" & UART_TX_DATA;
@@ -479,30 +509,180 @@ begin
 		end if;
 	end process;
 	
+	-- FT812 SPI master
 	U_FT_SPI: entity work.spi_master
 	generic map(
-		slaves => 1,
-		d_width => 24
+		N => 8,
+		CPOL => '0',
+		CPHA => '0',
+		PREFETCH => 2,
+		SPI_2X_CLK_DIV => 2
 	)
 	port map(
-		clock => CLK,
-		reset_n => '1',
-		enable => ft_cmd_wr,
-		cpol => '0',
-		cpha => '0',
-		cont => '0',
-		clk_div => 1,
-		addr => 1,
-		tx_data => ft_cmd,
-		miso => FT_MISO,
-		sclk => FT_SCK,
-		ss_n => ft_spi_ss_n,
-		mosi => FT_MOSI,
-		busy => ft_spi_busy,
-		rx_data => ft_rx_data
+		sclk_i => CLK,
+		pclk_i => CLK,
+		rst_i => not N_RESET,
+		
+		spi_ssel_o => FT_CS_N,
+		spi_sck_o => FT_SCK,
+		spi_mosi_o => FT_MOSI,
+		spi_miso_i => FT_MISO,
+		
+		di_req_o => ft_spi_di_req,
+		di_i => ft_spi_di_bus,
+		wren_i => ft_spi_wren,
+		wr_ack_o => ft_spi_wrack,
+		do_valid_o => ft_spi_do_valid,
+		do_o => ft_spi_do_bus,
+		
+		sck_ena_o => ft_spi_sck_ena,
+		sck_ena_ce_o => open,
+		do_transfer_o => open,
+		wren_o => open,
+		rx_bit_reg_o => open,
+		state_dbg_o => open,
+		core_clk_o => open,
+		core_n_clk_o => open,
+		core_ce_o => open,
+		core_n_ce_o => open,
+		sh_reg_dbg_o => open
 	);
+
+	-- todo: state machine: 
+	-- ft_cmd_wr -> ft_cmd 3 bytes write. send ready signal after command done (via queue)
+	-- ft_transaction_wr -> ft_addr 4 bytes + transaction_len bytes. send ready signal after command done (via queue)
+	-- send result to the MCU side: transaction_len bytes starting from 5th byte. mark each byte with idx (up to 16 bytes) via queue
 	
-FT_CS_N <= ft_spi_ss_n(0);
+	process (CLK)
+	variable count : integer := 0;
+	variable dcount : integer := 0;
+	begin
+	
+		if rising_edge(CLK) then
+
+			ft_queue_wr <= '0';
+			ft_queue_ack_wr <= '0';
+			
+			-- strobe queue data wr
+			if (ft_spi_do_valid = '1' and prev_ft_spi_do_valid = '0') then -- second cycle
+				ft_queue_wr <= '1';
+				ft_queue_data <= std_logic_vector(to_unsigned(dcount, 8)) & ft_spi_do_bus;
+				dcount := dcount + 1;
+			end if;
+			prev_ft_spi_do_valid <= ft_spi_do_valid;
+			prev_ft_spi_di_req <= ft_spi_di_req;
+
+			case fstate is			
+				
+				when ft_idle => 
+				
+					ft_spi_wren <= '0';
+					count := 0;
+				
+					if (ft_cmd_wr = '1') then
+						fstate <= cmd_send_cmd;
+					elsif (ft_transaction_wr = '1') then
+						fstate <= cmd_send_data;
+					end if;
+				
+				-- send ft command, return ack back to mcu
+				when cmd_send_cmd => 
+					
+					case count is
+						when 0 => 
+							dcount := 0;
+							ft_spi_wren <= '1';
+							ft_spi_di_bus <= ft_cmd(23 downto 16);
+							if (ft_spi_wrack = '1') then
+								count := count + 1;
+							end if;
+						when 1 => 
+							ft_spi_wren <= '0';
+							if (ft_spi_di_req = '1' and prev_ft_spi_di_req = '1') then
+								ft_spi_wren <= '1';
+								ft_spi_di_bus <= ft_cmd(15 downto 8);
+								count := count + 1;
+							end if;
+						when 2 => 
+							ft_spi_wren <= '0';
+							if (ft_spi_di_req = '1' and prev_ft_spi_di_req = '1') then
+								ft_spi_wren <= '1';
+								ft_spi_di_bus <= ft_cmd(7 downto 0);
+								count := count + 1;
+							end if;
+						when 3 => 
+							ft_spi_wren <= '0';
+							if (ft_spi_di_req = '1' and prev_ft_spi_di_req = '1') then
+								ft_spi_wren <= '0';
+								fstate <= ft_idle;
+								count := 0;
+							end if;
+						when others => null;
+					end case;
+					
+				when ack_cmd => 
+					ft_queue_ack_wr <= '1';
+					ft_queue_ack_data <= x"0901"; --ack cmd
+					fstate <= ft_idle;
+					
+				-- send ft data, return ack back to mcu
+				when cmd_send_data => 
+					
+					case count is
+						when 0 => 
+							dcount := 0;
+							ft_spi_wren <= '1';
+							ft_spi_di_bus <= ft_addr(31 downto 24);
+							if (ft_spi_wrack = '1') then
+								count := count + 1;
+							end if;
+						when 1 => 
+							ft_spi_wren <= '0';
+							if (ft_spi_di_req = '1' and prev_ft_spi_di_req = '1') then
+								ft_spi_wren <= '1';
+								ft_spi_di_bus <= ft_addr(23 downto 16);
+								count := count + 1;
+							end if;
+						when 2 => 
+							ft_spi_wren <= '0';
+							if (ft_spi_di_req = '1' and prev_ft_spi_di_req = '1') then
+								ft_spi_wren <= '1';
+								ft_spi_di_bus <= ft_addr(15 downto 8);
+								count := count + 1;
+							end if;
+						when 3 => 
+							ft_spi_wren <= '0';
+							if (ft_spi_di_req = '1' and prev_ft_spi_di_req = '1') then
+								ft_spi_wren <= '1';
+								ft_spi_di_bus <= ft_addr(7 downto 0);
+								count := count + 1;
+							end if;							
+						when others => 
+							ft_spi_wren <= '0';
+							if (ft_spi_di_req = '1' and prev_ft_spi_di_req = '1') then
+								if (count-4 <= ft_transaction_len-1) then
+									ft_spi_wren <= '1';
+									ft_spi_di_bus <= ft_tx_data(8*(count-4)+7  downto 8*(count-4));
+									count := count + 1;
+								else
+									fstate <= ft_idle;
+									ft_spi_wren <= '0';
+									count := 0;					
+								end if;
+							end if;
+					end case;
+					
+				when ack_data => 
+					ft_queue_ack_wr <= '1';
+					ft_queue_ack_data <= x"0A" & ft_transaction_len; --ack data
+					fstate <= ft_idle;
+					
+				when others => fstate <= ft_idle;
+				
+			end case;
+			
+		end if;
+	end process;
 
 end RTL;
 
