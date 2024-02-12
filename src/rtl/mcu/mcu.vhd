@@ -516,7 +516,7 @@ begin
 		CPOL => '0',
 		CPHA => '0',
 		PREFETCH => 2,
-		SPI_2X_CLK_DIV => 5
+		SPI_2X_CLK_DIV => 2
 	)
 	port map(
 		sclk_i => CLK,
