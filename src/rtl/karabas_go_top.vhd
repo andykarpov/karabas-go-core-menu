@@ -2,6 +2,8 @@ library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.std_logic_unsigned.all;
 use IEEE.numeric_std.all; 
+library unisim;
+use unisim.vcomponents.all;
 
 entity karabas_go is
     Port ( CLK_50MHZ : in  STD_LOGIC;
@@ -96,6 +98,7 @@ signal clk_vga		: std_logic;
 signal locked : std_logic;
 signal areset 		: std_logic;
 signal v_clk_vga : std_logic;
+signal v_clk_int : std_logic;
 
 signal osd_rgb : std_logic_vector(23 downto 0);
 signal osd_command: std_logic_vector(15 downto 0);
@@ -159,19 +162,6 @@ port map(
 );
 
 areset <= not locked;
-
--- V_CLK buf
---ODDR2_inst: ODDR2
---port map(
---	Q => V_CLK_VGA,
---	C0 => clk_vga,
---	C1 => not(clk_vga),
---	CE => '1',
---	D0 => '1',
---	D1 => '0',
---	R => '0',
---	S => '0'
---);
 
 -- VGA SYNC
 vga_sync_inst: entity work.vga_sync
@@ -269,10 +259,31 @@ VGA_G <= (others => 'Z') when ft_vga_on = '1' else osd_rgb(15 downto 8) when bla
 VGA_B <= (others => 'Z') when ft_vga_on = '1' else osd_rgb(7 downto 0) when blank = '0' else "00000000";
 VGA_HS <= 'Z' when ft_vga_on = '1' else hsync;
 VGA_VS <= 'Z' when ft_vga_on = '1' else vsync;
-V_CLK <= FT_CLK when ft_vga_on = '1' else clk_vga;
+--V_CLK <= FT_CLK when ft_vga_on = '1' else clk_vga;
 
 -- ft812 exclusive access by mcu
 FT_OE_N <= '0' when ft_vga_on = '1' else '1';
+
+V_CLK_MUX : BUFGMUX_1
+port map (
+ I0      => clk_vga,
+ I1      => FT_CLK,
+ O       => v_clk_int,
+ S       => ft_vga_on
+);
+
+-- V_CLK buf
+ODDR2_inst: ODDR2
+port map(
+	Q => V_CLK,
+	C0 => v_clk_int,
+	C1 => not(v_clk_int),
+	CE => '1',
+	D0 => '1',
+	D1 => '0',
+	R => '0',
+	S => '0'
+);
 
 end Behavioral;
 
