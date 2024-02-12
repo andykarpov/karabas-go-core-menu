@@ -95,6 +95,7 @@ signal blue		: std_logic_vector(7 downto 0);
 signal clk_vga		: std_logic;
 signal locked : std_logic;
 signal areset 		: std_logic;
+signal v_clk_vga : std_logic;
 
 signal osd_rgb : std_logic_vector(23 downto 0);
 signal osd_command: std_logic_vector(15 downto 0);
@@ -160,17 +161,17 @@ port map(
 areset <= not locked;
 
 -- V_CLK buf
-ODDR2_inst: ODDR2
-port map(
-	Q => V_CLK,
-	C0 => clk_vga,
-	C1 => not(clk_vga),
-	CE => '1',
-	D0 => '1',
-	D1 => '0',
-	R => '0',
-	S => '0'
-);
+--ODDR2_inst: ODDR2
+--port map(
+--	Q => V_CLK_VGA,
+--	C0 => clk_vga,
+--	C1 => not(clk_vga),
+--	CE => '1',
+--	D0 => '1',
+--	D1 => '0',
+--	R => '0',
+--	S => '0'
+--);
 
 -- VGA SYNC
 vga_sync_inst: entity work.vga_sync
@@ -251,7 +252,7 @@ port map(
 	
 	FT_SPI_ON => ft_spi_on,
 	FT_VGA_ON => ft_vga_on,
-	FT_CS_N => FT_SPI_CS_N,
+	FT_CS_N => FT_SPI_CS_N, -- todo: mux on ft_spi_on with host spi
 	FT_MOSI => FT_SPI_MOSI,
 	FT_MISO => FT_SPI_MISO,
 	FT_SCK => FT_SPI_SCK,
@@ -263,11 +264,12 @@ red	<= (hcnt(7 downto 0) + shift) and "11111111";
 green	<= (vcnt(7 downto 0) + shift) and "11111111";
 blue	<= (hcnt(7 downto 0) + vcnt(7 downto 0) - shift) and "11111111";
 
-VGA_R <= osd_rgb(23 downto 16) when blank = '0' else "00000000";
-VGA_G <= osd_rgb(15 downto 8) when blank = '0' else "00000000";
-VGA_B <= osd_rgb(7 downto 0) when blank = '0' else "00000000";
-VGA_HS <= hsync;
-VGA_VS <= vsync;
+VGA_R <= (others => 'Z') when ft_vga_on = '1' else osd_rgb(23 downto 16) when blank = '0' else "00000000";
+VGA_G <= (others => 'Z') when ft_vga_on = '1' else osd_rgb(15 downto 8) when blank = '0' else "00000000";
+VGA_B <= (others => 'Z') when ft_vga_on = '1' else osd_rgb(7 downto 0) when blank = '0' else "00000000";
+VGA_HS <= 'Z' when ft_vga_on = '1' else hsync;
+VGA_VS <= 'Z' when ft_vga_on = '1' else vsync;
+V_CLK <= FT_CLK when ft_vga_on = '1' else clk_vga;
 
 -- ft812 exclusive access by mcu
 FT_OE_N <= '0' when ft_vga_on = '1' else '1';

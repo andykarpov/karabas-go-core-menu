@@ -516,7 +516,7 @@ begin
 		CPOL => '0',
 		CPHA => '0',
 		PREFETCH => 2,
-		SPI_2X_CLK_DIV => 2
+		SPI_2X_CLK_DIV => 5
 	)
 	port map(
 		sclk_i => CLK,
@@ -620,11 +620,6 @@ begin
 						when others => null;
 					end case;
 					
-				when ack_cmd => 
-					ft_queue_ack_wr <= '1';
-					ft_queue_ack_data <= x"0901"; --ack cmd
-					fstate <= ft_idle;
-					
 				-- send ft data, return ack back to mcu
 				when cmd_send_data => 
 					
@@ -648,7 +643,11 @@ begin
 							if (ft_spi_di_req = '1' and prev_ft_spi_di_req = '1') then
 								ft_spi_wren <= '1';
 								ft_spi_di_bus <= ft_addr(15 downto 8);
-								count := count + 1;
+								if (ft_addr(31) = '1') then -- skip dummy byte for write transaction
+									count := count + 2;
+								else
+									count := count + 1;
+								end if;
 							end if;
 						when 3 => 
 							ft_spi_wren <= '0';
@@ -671,11 +670,6 @@ begin
 								end if;
 							end if;
 					end case;
-					
-				when ack_data => 
-					ft_queue_ack_wr <= '1';
-					ft_queue_ack_data <= x"0A" & ft_transaction_len; --ack data
-					fstate <= ft_idle;
 					
 				when others => fstate <= ft_idle;
 				
