@@ -163,6 +163,7 @@ architecture rtl of mcu is
 	signal ft_rx_data : std_logic_vector(2047 downto 0); -- 255 bytes
 		 
 	-- ft spi
+	signal ft_spi_slow		: std_logic := '1';
 	signal ft_spi_di_bus		: std_logic_vector(7 downto 0);
 	signal ft_spi_do_bus		: std_logic_vector(7 downto 0);
 	signal ft_spi_busy		: std_logic := '0';
@@ -351,6 +352,7 @@ begin
 							when x"00" => 
 								FT_SPI_ON <= spi_do(0);
 								FT_VGA_ON <= spi_do(1);
+								ft_spi_slow <= spi_do(2);
 							
 							-- command register
 							when x"01" => ft_cmd(23 downto 16) <= spi_do(7 downto 0);
@@ -516,12 +518,14 @@ begin
 		CPOL => '0',
 		CPHA => '0',
 		PREFETCH => 2,
-		SPI_2X_CLK_DIV => 2
+		SPI_2X_CLK_DIV => 2,
+		SPI_SLOW_CLK_DIV => 5
 	)
 	port map(
-		sclk_i => CLK,
+		sclk_i => CLK, -- 25.2 (vga)
 		pclk_i => CLK,
 		rst_i => not N_RESET,
+		slow_i => ft_spi_slow,
 		
 		spi_ssel_o => FT_CS_N,
 		spi_sck_o => FT_SCK,

@@ -176,11 +176,13 @@ entity spi_master is
         CPOL : std_logic := '0';                                        -- SPI mode selection (mode 0 default)
         CPHA : std_logic := '0';                                        -- CPOL = clock polarity, CPHA = clock phase.
         PREFETCH : positive := 2;                                       -- prefetch lookahead cycles
-        SPI_2X_CLK_DIV : positive := 5);                                -- for a 100MHz sclk_i, yields a 10MHz SCK
+        SPI_2X_CLK_DIV : positive := 5;											-- for a 100MHz sclk_i, yields a 10MHz SCK
+		  SPI_SLOW_CLK_DIV : positive := 5);                              -- slow CLK div  
     Port (  
         sclk_i : in std_logic := 'X';                                   -- high-speed serial interface system clock
         pclk_i : in std_logic := 'X';                                   -- high-speed parallel interface system clock
         rst_i : in std_logic := 'X';                                    -- reset core
+		  slow_i : in std_logic := '1';												-- slow SPI mode
         ---- serial interface ----
         spi_ssel_o : out std_logic;                                     -- spi bus slave select line
         spi_sck_o : out std_logic;                                      -- spi bus sck
@@ -320,15 +322,33 @@ begin
     -- generate the 2x spi base clock enable from the serial high-speed input clock
     spi_2x_ce_gen_proc: process (sclk_i) is
         variable clk_cnt : integer range SPI_2X_CLK_DIV-1 downto 0 := 0;
+		  variable clk_slow_cnt : integer range SPI_SLOW_CLK_DIV-1 downto 0 := 0;
     begin
         if sclk_i'event and sclk_i = '1' then
+				-- fast clkdiv
             if clk_cnt = SPI_2X_CLK_DIV-1 then
-                spi_2x_ce <= '1';
+                if (slow_i = '0') then 
+						spi_2x_ce <= '1';
+					 end if;
                 clk_cnt := 0;
             else
-                spi_2x_ce <= '0';
+					 if (slow_i = '0') then
+						spi_2x_ce <= '0';
+					 end if;
                 clk_cnt := clk_cnt + 1;
             end if;
+				-- slow clkdiv
+            if clk_slow_cnt = SPI_SLOW_CLK_DIV-1 then
+                if (slow_i = '1') then 
+						spi_2x_ce <= '1';
+					 end if;
+                clk_slow_cnt := 0;
+            else
+					 if (slow_i = '1') then
+						spi_2x_ce <= '0';
+					 end if;
+                clk_slow_cnt := clk_slow_cnt + 1;
+            end if;				
         end if;
     end process spi_2x_ce_gen_proc;
     -----------------------------------------------------------------------------------------------
