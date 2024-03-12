@@ -71,5 +71,7 @@
    (// Clock in ports
     .CLK_IN1(CLK_IN1),      // IN
     // Clock out ports
-    .CLK_OUT1(CLK_OUT1));    // OUT
+    .CLK_OUT1(CLK_OUT1),     // OUT
+    // Status and control signals
+    .LOCKED(LOCKED));      // OUT
 // INST_TAG_END ------ End INSTANTIATION Template ---------

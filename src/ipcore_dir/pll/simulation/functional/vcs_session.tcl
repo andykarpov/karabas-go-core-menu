@@ -8,6 +8,8 @@ gui_sg_addsignal -group pll_group {pll_tb.CLK_IN1}
 gui_sg_addsignal -group pll_group {{Output_clocks}} -divider
 gui_sg_addsignal -group pll_group {pll_tb.dut.clk}
 gui_list_expand -id Wave.1 pll_tb.dut.clk
+gui_sg_addsignal -group pll_group {{Status_control}} -divider
+gui_sg_addsignal -group pll_group {pll_tb.LOCKED}
 gui_sg_addsignal -group pll_group {{Counters}} -divider
 gui_sg_addsignal -group pll_group {pll_tb.COUNT}
 gui_sg_addsignal -group pll_group {pll_tb.dut.counter}
