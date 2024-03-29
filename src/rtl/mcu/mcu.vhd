@@ -19,20 +19,23 @@ entity mcu is
     MCU_SPI_MISO    : out std_logic := 'Z';
     MCU_SPI_SCK     : in std_logic;
 	 MCU_SPI_SS 		 : in std_logic;
-
-	 -- spi2
-    MCU_SPI2_MOSI    : in std_logic;
-    MCU_SPI2_MISO    : out std_logic := 'Z';
-    MCU_SPI2_SCK     : in std_logic;
-	 MCU_SPI2_SS 		 : in std_logic;
+	 MCU_SPI_FT_SS 		 : in std_logic;
+	 MCU_SPI_SD2_SS 		 : in std_logic;
 
 	 -- ft812 exclusive access by mcu
-	 FT_SPI_ON : buffer std_logic := '0'; -- spi access
-	 FT_VGA_ON : buffer std_logic := '0'; -- vga access
+	 FT_SPI_ON : buffer std_logic := '0'; -- spi access on
+	 FT_VGA_ON : buffer std_logic := '0'; -- vga access on
+
 	 FT_SCK	  : out std_logic := '1';
 	 FT_MOSI	  : out std_logic := '1';
 	 FT_MISO	  : in  std_logic := '1';
 	 FT_CS_N   : out std_logic := '1';
+	 
+	 -- sd2 exclusive access by mcu
+	 SD2_SCK	  : out std_logic := '1';
+	 SD2_MOSI	  : out std_logic := '1';
+	 SD2_MISO	  : in  std_logic := '1';
+	 SD2_CS_N   : out std_logic := '1';
 
     -- osd command
 	 OSD_COMMAND: out std_logic_vector(15 downto 0)
@@ -82,11 +85,19 @@ begin
 		  state_dbg_o    => open
 	);
 
-	MCU_SPI_MISO	<= spi_miso when MCU_SPI_SS = '0' else 'Z';	
-	FT_SCK <= MCU_SPI2_SCK when FT_SPI_ON = '1' else '1';
-	FT_CS_N <= MCU_SPI2_SS when FT_SPI_ON = '1' else '1';
-	FT_MOSI <= MCU_SPI2_MOSI when FT_SPI_ON = '1' else '1';
-	MCU_SPI2_MISO <= FT_MISO;
+	MCU_SPI_MISO <= 
+		spi_miso when MCU_SPI_SS = '0' else 
+		SD2_MISO when MCU_SPI_SD2_SS = '0' else
+		FT_MISO when MCU_SPI_FT_SS = '0' else 
+		'1';		
+	
+	FT_SCK <= MCU_SPI_SCK;
+	FT_CS_N <= MCU_SPI_FT_SS;
+	FT_MOSI <= MCU_SPI_MOSI;
+	
+	SD2_SCK <= MCU_SPI_SCK;
+	SD2_CS_N <= MCU_SPI_SD2_SS;
+	SD2_MOSI <= MCU_SPI_MOSI;
 	
 	process (CLK, spi_do_valid, spi_do)
 	begin
@@ -98,7 +109,7 @@ begin
 					-- osd commands					
 					when CMD_OSD => OSD_COMMAND <= spi_do(15 downto 0);
 					
-					-- ft812 spi control
+					-- ft812 / SD spi control
 					when CMD_CONTROL => 
 								FT_SPI_ON <= spi_do(0);
 								FT_VGA_ON <= spi_do(1);

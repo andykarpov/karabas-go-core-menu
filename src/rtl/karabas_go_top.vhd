@@ -82,10 +82,10 @@ entity karabas_go is
            MCU_SPI_MOSI : in  STD_LOGIC;
            MCU_SPI_MISO : out  STD_LOGIC;
 
-			  MCU_SPI2_CS_N : in  STD_LOGIC;
-           MCU_SPI2_SCK : in  STD_LOGIC;
-           MCU_SPI2_MOSI : in  STD_LOGIC;
-           MCU_SPI2_MISO : out  STD_LOGIC
+			  MCU_SPI_FT_CS_N : in  STD_LOGIC;
+			  MCU_SPI_SD2_CS_N : in  STD_LOGIC;
+			  
+           MCU_SPI_IO : inout  std_logic_vector(1 downto 0)
 			  
 			  );
 end karabas_go;
@@ -158,19 +158,22 @@ port map(
 	MCU_SPI_SCK => MCU_SPI_SCK,
 	MCU_SPI_SS => MCU_SPI_CS_N,
 
-	MCU_SPI2_MOSI => MCU_SPI2_MOSI,
-	MCU_SPI2_MISO => MCU_SPI2_MISO,
-	MCU_SPI2_SCK => MCU_SPI2_SCK,
-	MCU_SPI2_SS => MCU_SPI2_CS_N,
+	MCU_SPI_FT_SS => MCU_SPI_FT_CS_N,
+	MCU_SPI_SD2_SS => MCU_SPI_SD2_CS_N,
 	
 	OSD_COMMAND => osd_command,
 
-	FT_SPI_ON => open,
-	FT_VGA_ON => ft_vga_on,	
+	FT_VGA_ON => ft_vga_on,
+	
 	FT_CS_N => FT_SPI_CS_N,
 	FT_MOSI => FT_SPI_MOSI,
 	FT_MISO => FT_SPI_MISO,
-	FT_SCK => FT_SPI_SCK
+	FT_SCK => FT_SPI_SCK,
+	
+	SD2_CS_N => SD_CS_N,
+	SD2_MOSI => SD_DI,
+	SD2_MISO => SD_DO,
+	SD2_SCK => SD_CLK
 );
 
 red	<= (hcnt(7 downto 0) + shift) and "11111111";
@@ -233,8 +236,6 @@ SDR_DQM <= "00";
 SDR_WE_N <= '1';
 SDR_CAS_N <= '1';
 SDR_RAS_N <= '1';
-SD_CLK <= '1';
-SD_CS_N <= '1';
 FDC_DRIVE <= "00";
 FDC_MOTOR <= '0';
 
