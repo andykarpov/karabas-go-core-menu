@@ -1,7 +1,7 @@
 {
     "id": "boot",
     "name": "Boot Menu",
-    "build": "24021512",
+    "build": "24032920",
     "bitstream": "karabas_go.bin",
     "visible": false,
     "type": "boot",
