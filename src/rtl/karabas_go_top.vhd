@@ -77,10 +77,17 @@ entity karabas_go is
            VGA_VS : out  STD_LOGIC;
            V_CLK : out  STD_LOGIC;
            
-			  MCU_CS_N : in  STD_LOGIC;
-           MCU_SCK : in  STD_LOGIC;
-           MCU_MOSI : in  STD_LOGIC;
-           MCU_MISO : out  STD_LOGIC);
+			  MCU_SPI_CS_N : in  STD_LOGIC;
+           MCU_SPI_SCK : in  STD_LOGIC;
+           MCU_SPI_MOSI : in  STD_LOGIC;
+           MCU_SPI_MISO : out  STD_LOGIC;
+
+			  MCU_SPI_FT_CS_N : in  STD_LOGIC;
+			  MCU_SPI_SD2_CS_N : in  STD_LOGIC;
+			  
+           MCU_SPI_IO : inout  std_logic_vector(1 downto 0)
+			  
+			  );
 end karabas_go;
 
 architecture Behavioral of karabas_go is
@@ -103,55 +110,9 @@ signal v_clk_int : std_logic;
 signal osd_rgb : std_logic_vector(23 downto 0);
 signal osd_command: std_logic_vector(15 downto 0);
 
-signal ft_spi_on : std_logic := '0';
 signal ft_vga_on : std_logic := '0';
-signal ft_cs_n   : std_logic := '1';
-signal ft_sck    : std_logic := '1';
-signal ft_mosi   : std_logic := '1';
-
-  component ODDR2
-  port(
-          D0	: in std_logic;
-          D1	: in std_logic;
-          C0	: in std_logic;
-          C1	: in std_logic;
-          Q	: out std_logic;
-          CE    : in std_logic;
-          S     : in std_logic;
-          R	: in std_logic
-    );
-  end component;
 
 begin
-
-TAPE_OUT <= '0';
-BEEPER <= '0';
-DAC_LRCK <= '0';
-DAC_BCK <= '0';
-DAC_DAT <= '0';
-DAC_MUTE <= '1';
-ESP_RESET_N <= '1';
-ESP_BOOT_N <= '1';
-UART_CTS <= '0';
-WA <= (others => '1');
-WCS_N <= "11";
-WRD_N <= '1';
-WWR_N <= '1';
-WRESET_N <= '1';
-MA <= (others => '0');
-MWR_N <= "11";
-MRD_N <= "11";
-SDR_BA <= "00";
-SDR_A <= (others => '0');
-SDR_CLK <= '0';
-SDR_DQM <= "00";
-SDR_WE_N <= '1';
-SDR_CAS_N <= '1';
-SDR_RAS_N <= '1';
-SD_CLK <= '1';
-SD_CS_N <= '1';
-FDC_DRIVE <= "00";
-FDC_MOTOR <= '0';
 
 -- PLL
 pll0_inst: entity work.pll 
@@ -192,62 +153,27 @@ port map(
 	CLK => clk_vga,
 	N_RESET => not areset,
 	
-	MCU_MOSI => MCU_MOSI,
-	MCU_MISO => MCU_MISO,
-	MCU_SCK => MCU_SCK,
-	MCU_SS => MCU_CS_N,
-	
-	MS_X => open,
-	MS_Y => open,
-	MS_Z => open,
-	MS_B => open,
-	MS_UPD => open,
-	
-	KB_STATUS => open,
-	KB_DAT0 => open,
-	KB_DAT1 => open,
-	KB_DAT2 => open,
-	KB_DAT3 => open,
-	KB_DAT4 => open,
-	KB_DAT5 => open,
-	
-	JOY_L => open,
-	JOY_R => open,
-	
-	RTC_A => (others => '0'),
-	RTC_DI => (others => '0'),
-	RTC_DO => open,
-	RTC_CS => '0',
-	RTC_WR_N => '1',
+	MCU_SPI_MOSI => MCU_SPI_MOSI,
+	MCU_SPI_MISO => MCU_SPI_MISO,
+	MCU_SPI_SCK => MCU_SPI_SCK,
+	MCU_SPI_SS => MCU_SPI_CS_N,
+
+	MCU_SPI_FT_SS => MCU_SPI_FT_CS_N,
+	MCU_SPI_SD2_SS => MCU_SPI_SD2_CS_N,
 	
 	OSD_COMMAND => osd_command,
-	SOFTSW_COMMAND => open,
-	
-	UART_RX_DATA => open,
-	UART_RX_IDX => open,
-	 
-	UART_TX_DATA => (others => '0'),
-	UART_TX_WR	=> '0',
-	UART_TX_MODE => '0',
-	 
-	UART_DLM => (others => '0'),
-	UART_DLL => (others => '0'),
-	UART_DLM_WR => '0',
-	UART_DLL_WR => '0',
-	 
-	ROMLOADER_ACTIVE => open,
-	ROMLOAD_ADDR => open,
-	ROMLOAD_DATA => open,
-	ROMLOAD_WR => open,
-	
-	FT_SPI_ON => ft_spi_on,
+
 	FT_VGA_ON => ft_vga_on,
-	FT_CS_N => FT_SPI_CS_N, -- todo: mux on ft_spi_on with host spi
+	
+	FT_CS_N => FT_SPI_CS_N,
 	FT_MOSI => FT_SPI_MOSI,
 	FT_MISO => FT_SPI_MISO,
 	FT_SCK => FT_SPI_SCK,
-
-	BUSY => open
+	
+	SD2_CS_N => SD_CS_N,
+	SD2_MOSI => SD_DI,
+	SD2_MISO => SD_DO,
+	SD2_SCK => SD_CLK
 );
 
 red	<= (hcnt(7 downto 0) + shift) and "11111111";
@@ -259,11 +185,11 @@ VGA_G <= (others => 'Z') when ft_vga_on = '1' else osd_rgb(15 downto 8) when bla
 VGA_B <= (others => 'Z') when ft_vga_on = '1' else osd_rgb(7 downto 0) when blank = '0' else "00000000";
 VGA_HS <= 'Z' when ft_vga_on = '1' else hsync;
 VGA_VS <= 'Z' when ft_vga_on = '1' else vsync;
---V_CLK <= FT_CLK when ft_vga_on = '1' else clk_vga;
 
 -- ft812 exclusive access by mcu
 FT_OE_N <= '0' when ft_vga_on = '1' else '1';
 
+-- video clk mux
 V_CLK_MUX : BUFGMUX_1
 port map (
  I0      => clk_vga,
@@ -272,7 +198,7 @@ port map (
  S       => ft_vga_on
 );
 
--- V_CLK buf
+-- V_CLK output buf
 ODDR2_inst: ODDR2
 port map(
 	Q => V_CLK,
@@ -284,6 +210,34 @@ port map(
 	R => '0',
 	S => '0'
 );
+
+-- unused signals
+TAPE_OUT <= '0';
+BEEPER <= '0';
+DAC_LRCK <= '0';
+DAC_BCK <= '0';
+DAC_DAT <= '0';
+DAC_MUTE <= '1';
+ESP_RESET_N <= '1';
+ESP_BOOT_N <= '1';
+UART_CTS <= '0';
+WA <= (others => '1');
+WCS_N <= "11";
+WRD_N <= '1';
+WWR_N <= '1';
+WRESET_N <= '1';
+MA <= (others => '0');
+MWR_N <= "11";
+MRD_N <= "11";
+SDR_BA <= "00";
+SDR_A <= (others => '0');
+SDR_CLK <= '0';
+SDR_DQM <= "00";
+SDR_WE_N <= '1';
+SDR_CAS_N <= '1';
+SDR_RAS_N <= '1';
+FDC_DRIVE <= "00";
+FDC_MOTOR <= '0';
 
 end Behavioral;
 
