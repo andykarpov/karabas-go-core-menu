@@ -39,7 +39,6 @@ entity mcu is
 
     -- osd command
 	 OSD_COMMAND: out std_logic_vector(15 downto 0)
-	 
 	);
     end mcu;
 architecture rtl of mcu is

@@ -15,7 +15,7 @@ entity overlay is
 		HCNT_I	: in std_logic_vector(11 downto 0);
 		VCNT_I	: in std_logic_vector(11 downto 0);
 		
-		OSD_COMMAND 	: in std_logic_vector(15 downto 0)
+		OSD_COMMAND  : in std_logic_vector(15 downto 0)
 	);
 end entity;
 
@@ -60,6 +60,11 @@ architecture rtl of overlay is
 	 signal osd_overlay: std_logic := '0';
 	 signal osd_popup: std_logic := '0';
 	 
+	 signal osdfont_addr : std_logic_vector(10 downto 0) := (others => '1');
+	 signal osdfont_data : std_logic_vector(7 downto 0);
+	 signal osdfont_we : std_logic_vector(0 downto 0) := "0";
+	 signal osdfont_upd, osdfont_prev_upd : std_logic := '0';
+	 
 	 constant paper_start_h : natural := 0;
 	 constant paper_end_h : natural := 8*32; -- 32 characters in a row
 	 constant paper_start_v : natural := 0;
@@ -68,12 +73,17 @@ architecture rtl of overlay is
 	 constant paper_offset_v : natural := (HEIGHT/2 - paper_end_v)/2; -- offset from top
 begin
 
-	 -- 8x8 FONT
+	 -- 8x8 FONT RAM
 	 U_FONT: entity work.rom_font
     port map (
-        addra  => rom_addr,
-        clka   => CLK,
-        douta  => font_word
+		  addra  => osdfont_addr,
+		  dina   => osdfont_data,
+		  wea    => osdfont_we,
+		  clka   => CLK,
+		  
+        addrb  => rom_addr,
+        clkb   => CLK,
+        doutb  => font_word
     );
 
 	rgb <= RGB_I;
@@ -90,7 +100,7 @@ begin
         clkb   => CLK,
         doutb  => vram_do
     );
-
+	 
 	 flash <= '0';
 	 hcnt <= '0' & hcnt_i(11 downto 1) - paper_offset_h;
 	 vcnt <= '0' & vcnt_i(11 downto 1) - paper_offset_v;
@@ -169,9 +179,29 @@ begin
 						  when X"11" => vram_wr <= "0"; addr_write(9 downto 5) <= osd_command(4 downto 0); -- y: 0...32
 						  when X"12"  => vram_wr <= "0"; char_buf <= osd_command(7 downto 0); -- char
 						  when X"13"  => vram_wr <= "1"; vram_di <= char_buf & osd_command(7 downto 0); -- attrs
+						  when x"20" => 
+								-- reset font address
+								if (OSD_COMMAND(0) = '1') then 
+									osdfont_addr <= (others => '1');
+									osdfont_upd <= '0';
+									osdfont_prev_upd <= '0';
+								end if;
+						  when x"21" => 
+								-- new font data
+								osdfont_addr <= osdfont_addr + 1;
+								osdfont_data <= OSD_COMMAND(7 downto 0);
+								osdfont_upd <= not osdfont_upd;
 						  when others => vram_wr <= "0";
 						end case;
-					 end if;
+					end if;
+					
+					-- wr signal / osd font loader
+					osdfont_we <= "0";
+					if (osdfont_prev_upd /= osdfont_upd) then 
+						osdfont_prev_upd <= osdfont_upd;
+						osdfont_we <= "1";
+					end if;
+					
 			  end if;
 		end process;
 
