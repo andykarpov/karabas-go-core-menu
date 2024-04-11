@@ -1,3 +1,27 @@
+-------------------------------------------------------------------------------------------------------------------
+-- 
+-- 
+-- #       #######                                                 #                                               
+-- #                                                               #                                               
+-- #                                                               #                                               
+-- ############### ############### ############### ############### ############### ############### ############### 
+-- #             #               # #                             # #             #               # #               
+-- #             # ############### #               ############### #             # ############### ############### 
+-- #             # #             # #               #             # #             # #             #               # 
+-- #             # ############### #               ############### ############### ############### ############### 
+--                                                                                                                 
+--         ####### ####### ####### #######                                         ############### ############### 
+--                                                                                 #               #             # 
+--                                                                                 #   ########### #             # 
+--                                                                                 #             # #             # 
+-- https://github.com/andykarpov/karabas-mini                                      ############### ############### 
+--
+-- FPGA Boot core for Karabas-Go Mini
+--
+-- @author Andy Karpov <andy.karpov@gmail.com>
+-- Ukraine, 2024
+------------------------------------------------------------------------------------------------------------------
+
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.std_logic_unsigned.all;
@@ -110,17 +134,22 @@ signal ft_vga_on : std_logic := '0';
 signal ft_cs_n   : std_logic := '1';
 signal ft_sck    : std_logic := '1';
 signal ft_mosi   : std_logic := '1';
+signal ft_audio_stb : std_logic := '0';
+signal ft_audio_data : std_logic_vector(11 downto 0);
 
 signal host_vga_r, host_vga_g, host_vga_b : std_logic_vector(7 downto 0);
 signal host_vga_hs, host_vga_vs, host_vga_blank : std_logic;
 signal tmds_red, tmds_green, tmds_blue : std_logic_vector(9 downto 0);
 
+signal adc_l, adc_r : std_logic_vector(15 downto 0);
+signal audio_mix_l, audio_mix_r : std_logic_vector(15 downto 0);
+
 begin
 
 TAPE_OUT <= '0';
-AUDIO_L <= '0';
-AUDIO_R <= '0';
-ADC_CLK <= '0';
+--AUDIO_L <= '0';
+--AUDIO_R <= '0';
+--ADC_CLK <= '0';
 ESP_RESET_N <= '1';
 ESP_BOOT_N <= '1';
 UART_CTS <= '0';
@@ -139,12 +168,11 @@ SDR_DQM <= "00";
 SDR_WE_N <= '1';
 SDR_CAS_N <= '1';
 SDR_RAS_N <= '1';
-SD_CLK <= '1';
-SD_CS_N <= '1';
-ADC_CLK <= '0';
+--SD_CLK <= '1';
+--SD_CS_N <= '1';
 MIDI_IN <= '0';
 MIDI_CLK <= '0';
-MIDI_RST_N <= '0';
+MIDI_RST_N <= '1';
 FT_RESET <= '1';
 
 -- PLL
@@ -194,62 +222,26 @@ port map(
 	CLK => clk_vga,
 	N_RESET => not areset,
 	
-	MCU_MOSI => MCU_MOSI,
-	MCU_MISO => MCU_MISO,
-	MCU_SCK => MCU_SCK,
-	MCU_SS => MCU_CS_N,
-	
-	MS_X => open,
-	MS_Y => open,
-	MS_Z => open,
-	MS_B => open,
-	MS_UPD => open,
-	
-	KB_STATUS => open,
-	KB_DAT0 => open,
-	KB_DAT1 => open,
-	KB_DAT2 => open,
-	KB_DAT3 => open,
-	KB_DAT4 => open,
-	KB_DAT5 => open,
-	
-	JOY_L => open,
-	JOY_R => open,
-	
-	RTC_A => (others => '0'),
-	RTC_DI => (others => '0'),
-	RTC_DO => open,
-	RTC_CS => '0',
-	RTC_WR_N => '1',
+	MCU_SPI_MOSI => MCU_MOSI,
+	MCU_SPI_MISO => MCU_MISO,
+	MCU_SPI_SCK => MCU_SCK,
+	MCU_SPI_SS => MCU_CS_N,	
+	MCU_SPI_FT_SS => MCU_IO(3),
+	MCU_SPI_SD2_SS => MCU_IO(2),
 	
 	OSD_COMMAND => osd_command,
-	SOFTSW_COMMAND => open,
-	
-	UART_RX_DATA => open,
-	UART_RX_IDX => open,
-	 
-	UART_TX_DATA => (others => '0'),
-	UART_TX_WR	=> '0',
-	UART_TX_MODE => '0',
-	 
-	UART_DLM => (others => '0'),
-	UART_DLL => (others => '0'),
-	UART_DLM_WR => '0',
-	UART_DLL_WR => '0',
-	 
-	ROMLOADER_ACTIVE => open,
-	ROMLOAD_ADDR => open,
-	ROMLOAD_DATA => open,
-	ROMLOAD_WR => open,
 	
 	FT_SPI_ON => ft_spi_on,
 	FT_VGA_ON => ft_vga_on,
-	FT_CS_N => FT_SPI_CS_N, -- todo: mux on ft_spi_on with host spi
+	FT_CS_N => FT_SPI_CS_N,
 	FT_MOSI => FT_SPI_MOSI,
 	FT_MISO => FT_SPI_MISO,
 	FT_SCK => FT_SPI_SCK,
-
-	BUSY => open
+	
+	SD2_CS_N => SD_CS_N,
+	SD2_MOSI => SD_DI,
+	SD2_MISO => SD_DO,
+	SD2_SCK => SD_CLK
 );
 
 red	<= (hcnt(7 downto 0) + shift) and "11111111";
@@ -284,12 +276,12 @@ port map(
 	I_R => host_vga_r,
 	I_G => host_vga_g,
 	I_B => host_vga_b,
-	I_BLANK => host_vga_blank,
+	I_BLANK => host_vga_blank, -- todo
 	I_HSYNC => host_vga_hs,
 	I_VSYNC => host_vga_vs,
-	I_AUDIO_ENABLE => '0',
-	I_AUDIO_PCM_L => (others => '0'),
-	I_AUDIO_PCM_R => (others => '0'),
+	I_AUDIO_ENABLE => '1', -- todo
+	I_AUDIO_PCM_L => audio_mix_l,
+	I_AUDIO_PCM_R => audio_mix_r,
 	O_RED => tmds_red,
 	O_GREEN => tmds_green,
 	O_BLUE => tmds_blue
@@ -307,11 +299,59 @@ port map(
 	tmds_out_n => tmds_n	
 );
 
--- TODO: ADC
+-- Sigma-Delta DAC
+dac_l : entity work.sigma_delta_dac
+port map(
+	DACout => AUDIO_L,
+	DACin => audio_mix_l,
+	CLK => clk_hdmi,
+	RESET => areset
+);
 
--- TODO: FT PWM ADC
+dac_r : entity work.sigma_delta_dac
+port map(
+	DACout => AUDIO_R,
+	DACin => audio_mix_r,
+	CLK => clk_hdmi,
+	RESET => areset
+);
 
--- TODO: PWM AUDIO OUT
+-- PWM ADC
+adc1: entity work.pwm_adc
+port map(
+	clk => clk_hdmi,
+	sdin => FT_AUDIO,
+	fb => open,
+	newsample => ft_audio_stb,
+	dout => ft_audio_data
+);
+
+-- PCM1808 ADC
+adc2: entity work.pcm1808
+port map(
+	MCLK => v_clk_int,
+	LRCLK => ADC_LRCK,
+	SCLK => ADC_BCK,
+	AD_DAT => ADC_DOUT,
+	DATA_L => adc_l,
+	DATA_R => adc_r
+);
+
+-- ADC_CLK output buf
+ODDR2_ADC: ODDR2
+port map(
+	Q => ADC_CLK,
+	C0 => v_clk_int,
+	C1 => not(v_clk_int),
+	CE => '1',
+	D0 => '1',
+	D1 => '0',
+	R => '0',
+	S => '0'
+);
+
+audio_mix_l <= ("0000" & ft_audio_stb) + adc_l;
+audio_mix_r <= ("0000" & ft_audio_stb) + adc_r;
 
 end Behavioral;
 
