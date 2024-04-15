@@ -37,10 +37,10 @@ entity karabas_mini is
            AUDIO_L  : out  STD_LOGIC;
            AUDIO_R  : out  STD_LOGIC;
 
-           ADC_LRCK : in  STD_LOGIC;
-           ADC_DOUT : in  STD_LOGIC;
            ADC_CLK  : out  STD_LOGIC;
-           ADC_BCK   : in  STD_LOGIC;
+           ADC_BCK   : out  STD_LOGIC;
+           ADC_LRCK : out  STD_LOGIC;
+           ADC_DOUT : in  STD_LOGIC;
 
            MIDI_IN : out std_logic;
            MIDI_CLK : out std_logic;
@@ -141,7 +141,7 @@ signal host_vga_r, host_vga_g, host_vga_b : std_logic_vector(7 downto 0);
 signal host_vga_hs, host_vga_vs, host_vga_blank : std_logic;
 signal tmds_red, tmds_green, tmds_blue : std_logic_vector(9 downto 0);
 
-signal adc_l, adc_r : std_logic_vector(15 downto 0);
+signal adc_l, adc_r : std_logic_vector(23 downto 0);
 signal audio_mix_l, audio_mix_r : std_logic_vector(15 downto 0);
 
 begin
@@ -300,49 +300,43 @@ port map(
 );
 
 -- Sigma-Delta DAC
-dac_l : entity work.sigma_delta_dac
+dac_l : entity work.dac
 port map(
-	DACout => AUDIO_L,
-	DACin => audio_mix_l,
-	CLK => clk_hdmi,
-	RESET => areset
+	I_CLK => clk_vga,
+	I_RESET => areset,
+	I_DATA => "00" & not(audio_mix_l(15)) & audio_mix_l(14 downto 4) & "00",
+	O_DAC => AUDIO_L
 );
 
-dac_r : entity work.sigma_delta_dac
+dac_r : entity work.dac
 port map(
-	DACout => AUDIO_R,
-	DACin => audio_mix_r,
-	CLK => clk_hdmi,
-	RESET => areset
+	I_CLK => clk_vga,
+	I_RESET => areset,
+	I_DATA => "00" & not(audio_mix_r(15)) & audio_mix_r(14 downto 4) & "00",
+	O_DAC => AUDIO_R
 );
 
--- PWM ADC
-adc1: entity work.pwm_adc
+-- ADC
+adc : entity work.i2s_transceiver
 port map(
-	clk => clk_hdmi,
-	sdin => FT_AUDIO,
-	fb => open,
-	newsample => ft_audio_stb,
-	dout => ft_audio_data
-);
-
--- PCM1808 ADC
-adc2: entity work.pcm1808
-port map(
-	MCLK => v_clk_int,
-	LRCLK => ADC_LRCK,
-	SCLK => ADC_BCK,
-	AD_DAT => ADC_DOUT,
-	DATA_L => adc_l,
-	DATA_R => adc_r
+	reset_n => not(areset),
+	mclk => clk_vga,
+	sclk => ADC_BCK,
+	ws => ADC_LRCK,
+	sd_tx => open,
+	sd_rx => ADC_DOUT,
+	l_data_tx => (others => '0'),
+	r_data_tx => (others => '0'),
+	l_data_rx => adc_l,
+	r_data_rx => adc_r
 );
 
 -- ADC_CLK output buf
 ODDR2_ADC: ODDR2
 port map(
 	Q => ADC_CLK,
-	C0 => v_clk_int,
-	C1 => not(v_clk_int),
+	C0 => clk_vga,
+	C1 => not(clk_vga),
 	CE => '1',
 	D0 => '1',
 	D1 => '0',
@@ -350,8 +344,8 @@ port map(
 	S => '0'
 );
 
-audio_mix_l <= ("0000" & ft_audio_stb) + adc_l;
-audio_mix_r <= ("0000" & ft_audio_stb) + adc_r;
+audio_mix_l <= adc_l(23 downto 8);
+audio_mix_r <= adc_r(23 downto 8);
 
 end Behavioral;
 

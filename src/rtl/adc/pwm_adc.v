@@ -1,12 +1,11 @@
 module pwm_adc(
-    input clk,			// 128 x Fs
-    input sdin,			// input from analog comparator
-    output fb,			// Feedback to integrator
-    output newsample,	// New output sample next clock pulse
-    output [11:0]dout	// Output data
+    input wire clk,			// 128 x Fs
+    input wire sdin,			// input from analog comparator
+    output reg fb,			// Feedback to integrator
+    output wire newsample,	// New output sample next clock pulse
+    output reg [11:0]dout	// Output data
 );
 
-reg fb=0;
 reg [18:0]inte1=0;		// Integrator registers
 reg [18:0]inte2=0;
 reg [18:0]inte3=0;
@@ -22,9 +21,9 @@ wire [18:0]sub2 = sub1 - diff2;
 wire [18:0]sub3 = sub2 - diff3;
 
 reg [5:0]deci=0;		// Decimator counter
-wire newsample = &deci;	// new sample after maximal count
+assign newsample = &deci;	// new sample after maximal count
 
-reg [11:0]dout=0;		// Output register (12 bits, but only 10.4 effective bits)
+//reg [11:0]dout=0;		// Output register (12 bits, but only 10.4 effective bits)
 
 always @(negedge clk) begin
     fb <= ~sdin;		// Negative feedback loop
