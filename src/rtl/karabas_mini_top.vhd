@@ -302,7 +302,7 @@ port map(
 -- Sigma-Delta DAC
 dac_l : entity work.dac
 port map(
-	I_CLK => clk_vga,
+	I_CLK => v_clk_int,
 	I_RESET => areset,
 	I_DATA => "00" & not(audio_mix_l(15)) & audio_mix_l(14 downto 4) & "00",
 	O_DAC => AUDIO_L
@@ -310,7 +310,7 @@ port map(
 
 dac_r : entity work.dac
 port map(
-	I_CLK => clk_vga,
+	I_CLK => v_clk_int,
 	I_RESET => areset,
 	I_DATA => "00" & not(audio_mix_r(15)) & audio_mix_r(14 downto 4) & "00",
 	O_DAC => AUDIO_R
@@ -320,7 +320,7 @@ port map(
 adc : entity work.i2s_transceiver
 port map(
 	reset_n => not(areset),
-	mclk => clk_vga,
+	mclk => v_clk_int,
 	sclk => ADC_BCK,
 	ws => ADC_LRCK,
 	sd_tx => open,
@@ -335,8 +335,8 @@ port map(
 ODDR2_ADC: ODDR2
 port map(
 	Q => ADC_CLK,
-	C0 => clk_vga,
-	C1 => not(clk_vga),
+	C0 => v_clk_int,
+	C1 => not(v_clk_int),
 	CE => '1',
 	D0 => '1',
 	D1 => '0',
