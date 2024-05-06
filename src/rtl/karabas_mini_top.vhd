@@ -38,8 +38,8 @@ entity karabas_mini is
            AUDIO_R  : out  STD_LOGIC;
 
            ADC_CLK  : out  STD_LOGIC;
-           ADC_BCK   : inout  STD_LOGIC;
-           ADC_LRCK : inout  STD_LOGIC;
+           ADC_BCK   : out  STD_LOGIC;
+           ADC_LRCK : out  STD_LOGIC;
            ADC_DOUT : in  STD_LOGIC;
 
            MIDI_IN : out std_logic;
@@ -103,14 +103,7 @@ entity karabas_mini is
            MCU_SCK : in  STD_LOGIC;
            MCU_MOSI : in  STD_LOGIC;
            MCU_MISO : out  STD_LOGIC;
-           MCU_IO : inout STD_LOGIC_VECTOR(4 downto 0);
-			  
-			FLASH_CS_N : out std_logic;
-			FLASH_DO : in std_logic;
-			FLASH_DI : out std_logic;
-			FLASH_SCK: out std_logic;
-			FLASH_WP_N : out std_logic;
-			FLASH_HOLD_N : out std_logic	
+           MCU_IO : inout STD_LOGIC_VECTOR(4 downto 0)
 );
 end karabas_mini;
 
@@ -126,14 +119,12 @@ signal red		: std_logic_vector(7 downto 0);
 signal green		: std_logic_vector(7 downto 0);
 signal blue		: std_logic_vector(7 downto 0);
 signal clk_vga		: std_logic;
-signal clk_ft 		: std_logic;
 signal locked, lockedx5 : std_logic;
 signal areset 		: std_logic;
 signal v_clk_vga : std_logic;
 signal v_clk_int : std_logic;
 signal clk_hdmi : std_logic;
 signal clk_hdmi_n : std_logic;
-signal clk_200 : std_logic;
 
 signal osd_rgb : std_logic_vector(23 downto 0);
 signal osd_command: std_logic_vector(15 downto 0);
@@ -152,8 +143,6 @@ signal tmds_red, tmds_green, tmds_blue : std_logic_vector(9 downto 0);
 
 signal adc_l, adc_r : std_logic_vector(23 downto 0);
 signal audio_mix_l, audio_mix_r : std_logic_vector(15 downto 0);
-signal v_freq, prev_v_freq : std_logic_vector(31 downto 0);
-signal freq_change : std_logic := '0';
 
 begin
 
@@ -185,18 +174,12 @@ MIDI_IN <= '0';
 MIDI_CLK <= '0';
 MIDI_RST_N <= '1';
 FT_RESET <= '1';
-FLASH_CS_N <= '1';
-FLASH_SCK <= '1';
-FLASH_HOLD_N <= '1';
-FLASH_WP_N <= '1';
-FLASH_DI <= '1';
 
 -- PLL
 pll0_inst: entity work.pll 
 port map(
 	CLK_IN1 => CLK_50MHZ,
 	CLK_OUT1 => clk_vga,
-	CLK_OUT2 => clk_200,
 	LOCKED => locked
 );
 
@@ -258,9 +241,7 @@ port map(
 	SD2_CS_N => SD_CS_N,
 	SD2_MOSI => SD_DI,
 	SD2_MISO => SD_DO,
-	SD2_SCK => SD_CLK,
-	
-	DEBUG => x"0000" --v_freq(15 downto 0)
+	SD2_SCK => SD_CLK
 );
 
 red	<= (hcnt(7 downto 0) + shift) and "11111111";
@@ -274,29 +255,24 @@ host_vga_hs <= VGA_HS when ft_vga_on = '1' else hsync;
 host_vga_vs <= VGA_VS when ft_vga_on = '1' else vsync;
 host_vga_blank <= not(FT_DE) when ft_vga_on = '1' else blank;
 
-FT_CLK_BUF: IBUFG
-port map(
-	I => FT_CLK,
-	O => clk_ft
-);
-
 V_CLK_MUX : BUFGMUX_1
 port map (
  I0      => clk_vga,
- I1      => clk_ft,
+ I1      => FT_CLK,
  O       => v_clk_int,
  S       => ft_vga_on
 );
 
--- HDMI
+-- TODO: HDMI
 hdmi: entity work.hdmi
 generic map(
+	FREQ => 25000000, -- TODO: remap as signals to adjust on the fly ?
 	FS => 48000,
+	CTS => 25000,
 	N => 6144
 )
 port map(
 	I_CLK_PIXEL => v_clk_int,
-	I_CLK_REF => clk_200,
 	I_R => host_vga_r,
 	I_G => host_vga_g,
 	I_B => host_vga_b,
@@ -308,8 +284,7 @@ port map(
 	I_AUDIO_PCM_R => audio_mix_r,
 	O_RED => tmds_red,
 	O_GREEN => tmds_green,
-	O_BLUE => tmds_blue,
-	O_FREQ => open
+	O_BLUE => tmds_blue
 );
 
 hdmio: entity work.hdmi_out_xilinx
@@ -327,7 +302,7 @@ port map(
 -- Sigma-Delta DAC
 dac_l : entity work.dac
 port map(
-	I_CLK => v_clk_int,
+	I_CLK => clk_vga,
 	I_RESET => areset,
 	I_DATA => "00" & not(audio_mix_l(15)) & audio_mix_l(14 downto 4) & "00",
 	O_DAC => AUDIO_L
@@ -335,7 +310,7 @@ port map(
 
 dac_r : entity work.dac
 port map(
-	I_CLK => v_clk_int,
+	I_CLK => clk_vga,
 	I_RESET => areset,
 	I_DATA => "00" & not(audio_mix_r(15)) & audio_mix_r(14 downto 4) & "00",
 	O_DAC => AUDIO_R
@@ -345,7 +320,7 @@ port map(
 adc : entity work.i2s_transceiver
 port map(
 	reset_n => not(areset),
-	mclk => v_clk_int,
+	mclk => clk_vga,
 	sclk => ADC_BCK,
 	ws => ADC_LRCK,
 	sd_tx => open,
@@ -360,8 +335,8 @@ port map(
 ODDR2_ADC: ODDR2
 port map(
 	Q => ADC_CLK,
-	C0 => v_clk_int,
-	C1 => not(v_clk_int),
+	C0 => clk_vga,
+	C1 => not(clk_vga),
 	CE => '1',
 	D0 => '1',
 	D1 => '0',

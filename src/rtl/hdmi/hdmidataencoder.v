@@ -9,12 +9,9 @@
 //-- design of HDMI output for Neo Geo MVS
 
 module hdmidataencoder 
-#(parameter FS=48000, N=6144) 
+#(parameter FREQ=27000000, FS=48000, CTS=27000, N=6144) 
 (
    input          i_pixclk,
-	input [31:0]	i_freq,
-	input	[31:0]	i_cts,
-	input 			i_reset,
    input          i_hSync,
    input          i_vSync,
    input          i_blank,
@@ -28,11 +25,9 @@ module hdmidataencoder
 );
 
 `define AUDIO_TIMER_ADDITION  FS/1000
-//`define AUDIO_TIMER_LIMIT  FREQ/1000
-wire [31:0] AUDIO_TIMER_LIMIT = i_freq/1000; 
-
+`define AUDIO_TIMER_LIMIT  FREQ/1000
 localparam [191:0] channelStatus = (FS == 48000)?192'hc202004004:(FS == 44100)?192'hc200004004:192'hc203004004;
-wire [55:0] audioRegenPacket = {N[7:0], N[15:8], 8'h00, i_cts[7:0], i_cts[15:8], 16'h0000};
+localparam [55:0] audioRegenPacket = {N[7:0], N[15:8], 8'h00, CTS[7:0], CTS[15:8], 16'h0000};
 reg [23:0] audioPacketHeader;
 reg [55:0] audioSubPacket[3:0];
 reg [7:0] channelStatusIdx;
@@ -155,13 +150,13 @@ endtask
 task InfoGen;
    inout [16:0] _timer;
 begin
-   if (_timer >= i_cts) begin
+   if (_timer >= CTS) begin
       packetHeader<=24'h000001;  // audio clock regeneration packet
       subpacket[0]<=audioRegenPacket;
       subpacket[1]<=audioRegenPacket;
       subpacket[2]<=audioRegenPacket;
       subpacket[3]<=audioRegenPacket;
-      _timer <= _timer - i_cts + 1;
+      _timer <= _timer - CTS + 1;
    end else begin
       if (!oddLine) begin
          packetHeader<=24'h0D0282;  // infoframe AVI packet 
@@ -207,8 +202,8 @@ begin
    // Buffer up an audio sample
    // Don't add to the audio output if we're currently sending that packet though
    if (!( allowGeneration && counterX >= 32 && counterX < 64)) begin
-      if (audioTimer>=AUDIO_TIMER_LIMIT) begin
-         audioTimer<=audioTimer-AUDIO_TIMER_LIMIT+`AUDIO_TIMER_ADDITION;
+      if (audioTimer>=`AUDIO_TIMER_LIMIT) begin
+         audioTimer<=audioTimer-`AUDIO_TIMER_LIMIT+`AUDIO_TIMER_ADDITION;
          audioPacketHeader<=audioPacketHeader|24'h000002|((channelStatusIdx==0?24'h100100:24'h000100)<<samplesHead);
          audioSubPacket[samplesHead]<=((audioLAvg<<8)|(audioRAvg<<32)
                         |((^audioLAvg)?56'h08000000000000:56'h0)  // parity bit for left channel

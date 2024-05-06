@@ -44,13 +44,13 @@ SET_PARAMETER Prim_In_Jitter 0.010
 SET_PARAMETER Secondary_In_Jitter 0.010
 SET_PARAMETER Clkin1_Jitter_Ps 200.0
 SET_PARAMETER Clkin2_Jitter_Ps 100.0
-SET_PARAMETER Clkout2_Used true
+SET_PARAMETER Clkout2_Used false
 SET_PARAMETER Clkout3_Used false
 SET_PARAMETER Clkout4_Used false
 SET_PARAMETER Clkout5_Used false
 SET_PARAMETER Clkout6_Used false
 SET_PARAMETER Clkout7_Used false
-SET_PARAMETER Num_Out_Clks 2
+SET_PARAMETER Num_Out_Clks 1
 SET_PARAMETER Clk_Out1_Use_Fine_Ps_GUI false
 SET_PARAMETER Clk_Out2_Use_Fine_Ps_GUI false
 SET_PARAMETER Clk_Out3_Use_Fine_Ps_GUI false
@@ -80,7 +80,7 @@ SET_PARAMETER PSDONE_port PSDONE
 SET_PARAMETER Clkout1_Requested_Out_Freq 25.2
 SET_PARAMETER Clkout1_Requested_Phase 0.000
 SET_PARAMETER Clkout1_Requested_Duty_Cycle 50.000
-SET_PARAMETER Clkout2_Requested_Out_Freq 200.000
+SET_PARAMETER Clkout2_Requested_Out_Freq 100.000
 SET_PARAMETER Clkout2_Requested_Phase 0.000
 SET_PARAMETER Clkout2_Requested_Duty_Cycle 50.000
 SET_PARAMETER Clkout3_Requested_Out_Freq 100.000
@@ -224,7 +224,7 @@ SET_PARAMETER Pll_Ref_Jitter 0.010
 SET_PARAMETER Pll_Clkout0_Divide 16
 SET_PARAMETER Pll_Clkout0_Duty_Cycle 0.500
 SET_PARAMETER Pll_Clkout0_Phase 0.000
-SET_PARAMETER Pll_Clkout1_Divide 2
+SET_PARAMETER Pll_Clkout1_Divide 1
 SET_PARAMETER Pll_Clkout1_Duty_Cycle 0.500
 SET_PARAMETER Pll_Clkout1_Phase 0.000
 SET_PARAMETER Pll_Clkout2_Divide 1
