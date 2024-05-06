@@ -38,7 +38,9 @@ entity mcu is
 	 SD2_CS_N   : out std_logic := '1';
 
     -- osd command
-	 OSD_COMMAND: out std_logic_vector(15 downto 0)
+	 OSD_COMMAND: out std_logic_vector(15 downto 0);
+	 
+	 DEBUG : in std_logic_vector(15 downto 0)
 	);
     end mcu;
 architecture rtl of mcu is
@@ -46,6 +48,7 @@ architecture rtl of mcu is
 	-- spi commands
 	constant CMD_CONTROL    : std_logic_vector(7 downto 0) := x"09";
 	constant CMD_OSD 			: std_logic_vector(7 downto 0) := x"20";
+	constant CMD_DEBUG_DATA : std_logic_vector(7 downto 0) := x"31";
 	constant CMD_NOPE			: std_logic_vector(7 downto 0) := x"FF";
 
 	 -- spi
@@ -71,7 +74,7 @@ begin
 		  spi_miso_o     => spi_miso,
 
 		  di_req_o       => open,
-		  di_i           => CMD_NOPE & x"0000",
+		  di_i           => CMD_DEBUG_DATA & DEBUG,
 		  wren_i         => '1',
 		  
 		  do_valid_o     => spi_do_valid,

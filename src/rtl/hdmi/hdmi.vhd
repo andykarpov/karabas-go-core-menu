@@ -14,19 +14,22 @@
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
 use IEEE.STD_LOGIC_UNSIGNED.ALL;
 
 entity hdmi is
    generic (
-      FREQ: integer := 25000000;              -- pixel clock frequency
       FS: integer := 48000;                   -- audio sample rate - should be 32000, 44100 or 48000
-      CTS: integer := 25000;                  -- CTS = Freq(pixclk) * N / (128 * Fs)
       N: integer := 6144                      -- N = 128 * Fs /1000,  128 * Fs /1500 <= N <= 128 * Fs /300
                           -- Check HDMI spec 7.2 for details
    );
    port (
       -- clocks
       I_CLK_PIXEL    : in std_logic;
+
+		-- reference 200MHz clock to measure FREQ
+		I_CLK_REF : in std_logic;
+		
       -- components
       I_R            : in std_logic_vector(7 downto 0);
       I_G            : in std_logic_vector(7 downto 0);
@@ -41,7 +44,9 @@ entity hdmi is
       -- TMDS parallel pixel synchronous outputs (serialize LSB first)
       O_RED       : out std_logic_vector(9 downto 0); -- Red
       O_GREEN        : out std_logic_vector(9 downto 0); -- Green
-      O_BLUE         : out std_logic_vector(9 downto 0)  -- Blue
+      O_BLUE         : out std_logic_vector(9 downto 0);  -- Blue
+		
+		O_FREQ 			: out std_logic_vector(31 downto 0)
 );
 end entity;
 
@@ -50,13 +55,14 @@ architecture rtl of hdmi is
 component hdmidataencoder
 generic
 (
-   FREQ: integer := FREQ;
    FS: integer := FS;
-   CTS: integer := CTS;
    N: integer := N
 );
 port (
    i_pixclk : in std_logic;
+	i_freq : in std_logic_vector(31 downto 0);
+	i_cts : in std_logic_vector(31 downto 0);
+	i_reset : in std_logic;
    i_hSync     : in std_logic;
    i_vSync     : in std_logic;
    i_blank     : in std_logic;
@@ -152,12 +158,77 @@ end component;
    signal shift      : std_logic_vector(7 downto 0);
    signal hcnt    : std_logic_vector(11 downto 0) := "000000000000";    -- horizontal pixel counter
    signal vcnt    : std_logic_vector(11 downto 0) := "000000000000";    -- vertical line counter
+	
+	signal FREQ : std_logic_vector(31 downto 0) := (others => '0'); -- pixel freq in HZ
+	signal CTS : std_logic_vector(31 downto 0) := (others => '0'); -- CTS = Freq(pixclk) * N / (128 * Fs)
+	signal prev_CTS : std_logic_vector(31 downto 0) := (others => '0'); -- CTS = Freq(pixclk) * N / (128 * Fs)
+
+	signal t_cnt : natural := 0;
+	signal f_cnt : natural := 0;
+	signal pix_clk_r : std_logic_vector(1 downto 0) := "00";
+	signal prev_clk : std_logic := '0';
+	signal pix_en : std_logic := '0';
+	
+	signal reset : std_logic := '0';
    
 begin
 
-   process (I_CLK_PIXEL, hcnt)
+	process (I_CLK_PIXEL)
+	begin
+		if rising_edge(I_CLK_PIXEL) then
+			pix_en <= not pix_en;
+		end if;
+	end process;
+
+	-- crossing clock domain
+	process (I_CLK_REF)
+	begin
+		if rising_edge(I_CLK_REF) then 
+			pix_clk_r(0) <= pix_en;
+			pix_clk_r(1) <= pix_clk_r(0);
+		end if;
+	end process;
+	
+	-- reset (on 5kHz gap)
+	process (I_CLK_REF)
+	begin
+		if rising_edge(I_CLK_REF) then 
+			reset <= '0';
+			if (CTS - prev_CTS > 5) or (prev_CTS - CTS > 5) then 
+				reset <= '1';
+				prev_CTS <= CTS;
+			end if;
+		end if;
+	end process;
+	
+	-- freq measure
+	process (I_CLK_REF)
+	begin
+		if rising_edge(I_CLK_REF) then 
+			-- measure cycle 200k samples
+			prev_clk <= pix_clk_r(1);
+			if (t_cnt < 200000*5) then
+				if (pix_clk_r(1) = '1' and prev_clk = '0') then 
+					f_cnt <= f_cnt + 1;
+				end if;
+				t_cnt <= t_cnt + 1;
+			else 
+				FREQ <= std_logic_vector(to_unsigned(f_cnt * 1000 * 2 / 5, FREQ'length));
+				CTS <= std_logic_vector(to_unsigned(f_cnt * 2 / 5, CTS'length));
+				t_cnt <= 0;
+				f_cnt <= 0;
+			end if;
+		end if;
+	end process;
+	
+	o_freq <= CTS;
+
+   process (I_CLK_PIXEL, RESET, hcnt)
    begin
-      if rising_edge(I_CLK_PIXEL) then
+		if RESET = '1' then 
+			hcnt <= (others => '0');
+			vcnt <= (others => '0');
+      elsif rising_edge(I_CLK_PIXEL) then
          if hcnt = h_end_count then
             hcnt <= (others => '0');
          else
@@ -174,16 +245,6 @@ begin
       end if;
    end process;
    
-   --I_HSYNC   <= '1' when (hcnt <= h_sync_on) or (hcnt > h_sync_off) else '0';
-   --I_VSYNC   <= '1' when (vcnt <= v_sync_on) or (vcnt > v_sync_off) else '0'; 
-   --I_BLANK   <= '1' when (hcnt > h_pixels_across) or (vcnt > v_pixels_down) else '0'; -- 1 when blanking
-   
--- I_R   <= "11111111" when hcnt = 0 or hcnt = h_pixels_across or vcnt = 0 or vcnt = v_pixels_down else (hcnt(7 downto 0) + shift) and "11111111";
--- I_G   <= "11111111" when hcnt = 0 or hcnt = h_pixels_across or vcnt = 0 or vcnt = v_pixels_down else (vcnt(7 downto 0) + shift) and "11111111";
--- I_B   <= "11111111" when hcnt = 0 or hcnt = h_pixels_across or vcnt = 0 or vcnt = v_pixels_down else (hcnt(7 downto 0) + vcnt(7 downto 0) - shift) and "11111111";
-
-   
-
 -- data should be delayed for 11 clocks to allow preamble and guard band generation
 
 -- delay line inputs
@@ -215,9 +276,12 @@ vhSyncOut <= vSyncOut & hSyncOut;
 ctl_10 <= ctl1&ctl0;
 ctl_32 <= ctl3&ctl2;
 
-FSA: process(I_CLK_PIXEL) is 
+FSA: process(I_CLK_PIXEL, RESET) is 
 begin 
-   if(rising_edge(I_CLK_PIXEL)) then
+	if RESET = '1' then 
+		state <= controlData;
+		clockCounter <= 0;
+   elsif(rising_edge(I_CLK_PIXEL)) then
       if(prevBlank = '0' and i_BLANK = '1') then
          state <= controlData;
          clockCounter <= 0;
@@ -340,13 +404,16 @@ port map (
 
 dataenc: hdmidataencoder
 generic map (
-   FREQ => FREQ,
+   --FREQ => FREQ,
    FS => FS,
-   CTS => CTS,
+   --CTS => CTS,
    N => N
 )
 port map(
    i_pixclk    => I_CLK_PIXEL,
+	i_freq 		=> FREQ,
+	i_cts 		=> CTS,
+	i_reset 		=> RESET,
    i_blank     => I_BLANK,
    i_hSync     => I_HSYNC,
    i_vSync     => I_VSYNC,

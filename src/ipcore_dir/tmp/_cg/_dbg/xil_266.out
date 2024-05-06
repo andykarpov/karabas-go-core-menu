@@ -15,7 +15,7 @@ SET_PARAMETER pll_divclk_divide 1
 SET_PARAMETER override_dcm false
 SET_PARAMETER locked_port LOCKED
 SET_PARAMETER use_status false
-SET_PARAMETER clkout2_requested_out_freq 100.000
+SET_PARAMETER clkout2_requested_out_freq 200.000
 SET_PARAMETER clkin2_jitter_ps 100.0
 SET_PARAMETER dcm_clkgen_spread_spectrum NONE
 SET_PARAMETER clkfb_in_port CLKFB_IN
@@ -107,10 +107,10 @@ SET_PARAMETER clk_out5_port CLK_OUT5
 SET_PARAMETER dcm_clkgen_clkfxdv_divide 2
 SET_PARAMETER daddr_port DADDR
 SET_PARAMETER clkout5_requested_duty_cycle 50.000
-SET_PARAMETER num_out_clks 1
+SET_PARAMETER num_out_clks 2
 SET_PARAMETER use_reset false
 SET_PARAMETER mmcm_clkout2_duty_cycle 0.500
-SET_PARAMETER clkout2_used false
+SET_PARAMETER clkout2_used true
 SET_PARAMETER clkout5_requested_out_freq 100.000
 SET_PARAMETER relative_inclk REL_PRIMARY
 SET_PARAMETER clk_out6_port CLK_OUT6
@@ -191,7 +191,7 @@ SET_PARAMETER dcm_clk_out1_port CLKDV
 SET_PARAMETER power_down_port POWER_DOWN
 SET_PARAMETER mmcm_bandwidth OPTIMIZED
 SET_PARAMETER status_port STATUS
-SET_PARAMETER pll_clkout1_divide 1
+SET_PARAMETER pll_clkout1_divide 2
 SET_PARAMETER primtype_sel PLL_BASE
 SET_PARAMETER platform lin
 SET_PARAMETER dcm_clk_out2_port CLK0
