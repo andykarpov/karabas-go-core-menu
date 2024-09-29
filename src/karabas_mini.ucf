@@ -1,9 +1,12 @@
 # Karabas-Mini rev.C pinout
 # Warning! It was changed since revB (HDMI diff-pairs fix)
+# Warning! A short wire between T8 and E7 is required (clock fix to be located in bank0)
 
 # Clocks
-NET "CLK_50MHZ"        LOC="T8" | IOSTANDARD = LVCMOS33 |TNM_NET = sys_clk_pin;
-TIMESPEC TS_sys_clk_pin = PERIOD sys_clk_pin 50000 kHz;
+NET "CLK_50MHZ_OLD"    LOC="T8" | IOSTANDARD = LVCMOS33;
+NET "CLK_50MHZ"        LOC="E7" | IOSTANDARD = LVCMOS33;
+
+VCCAUX = 3.3;
 
 # Misc
 NET "TAPE_IN"      LOC="N14"   | IOSTANDARD = LVCMOS33 | PULLUP;
@@ -139,7 +142,7 @@ NET "FT_SPI_SCK"       LOC="E11"   | IOSTANDARD = LVCMOS33 | PULLUP;
 NET "FT_SPI_MISO"       LOC="E12"   | IOSTANDARD = LVCMOS33 | PULLUP;
 NET "FT_SPI_MOSI"       LOC="B15"   | IOSTANDARD = LVCMOS33;
 NET "FT_INT_N"       LOC="D12"   | IOSTANDARD = LVCMOS33;
-NET "FT_CLK"       LOC="A3"   | IOSTANDARD = LVCMOS33 | PULLUP;
+NET "FT_CLK"       LOC="A3"   | IOSTANDARD = LVCMOS33;
 NET "FT_AUDIO"       LOC="D11"   | IOSTANDARD = LVCMOS33;
 NET "FT_DE"       LOC="E8"   | IOSTANDARD = LVCMOS33;
 NET "FT_RESET"       LOC="C15"   | IOSTANDARD = LVCMOS33;
@@ -186,7 +189,7 @@ NET "MCU_IO<0>"     LOC="G6"   | IOSTANDARD = LVCMOS33;
 NET "MCU_IO<1>"     LOC="F6"   | IOSTANDARD = LVCMOS33;
 NET "MCU_IO<2>"     LOC="F7"   | IOSTANDARD = LVCMOS33;
 NET "MCU_IO<3>"     LOC="D6"   | IOSTANDARD = LVCMOS33;
-NET "MCU_IO<4>"     LOC="E7"   | IOSTANDARD = LVCMOS33;
+#NET "MCU_IO<4>"     LOC="E7"   | IOSTANDARD = LVCMOS33;
 
 # TMDS
 NET "TMDS_P<0>"       LOC="C13"   | IOSTANDARD = TMDS_33; # HDMI_D0P
@@ -215,9 +218,27 @@ NET "MCU_SCK" CLOCK_DEDICATED_ROUTE = FALSE;
 NET "FT_CLK" CLOCK_DEDICATED_ROUTE = FALSE;
 NET "ADC_BCK" CLOCK_DEDICATED_ROUTE = FALSE;
 
-NET "clk_vga" TNM_NET = "clk_vga";
-NET "FT_CLK" TNM_NET = "clk_ft";
-TIMESPEC "TS_CLK_VGA" = PERIOD "clk_vga" 48000 kHz;
-TIMESPEC "TS_CLK_FT" = PERIOD "clk_ft" 60000 kHz;
+###########################################
+# Timing Constraints
+###########################################
+#NET "sysclk_buf" TNM_NET = "TNM_CLK50M";
+#TIMESPEC "TS_CLK50M" = PERIOD "TNM_CLK50M" 50 MHz HIGH 50 % PRIORITY 0 ;
 
-# TODO: SPI FLASH
+NET "pclk" TNM_NET = "TNM_PCLK";
+TIMESPEC "TS_PCLK" = PERIOD "TNM_PCLK" 108 MHz HIGH 50 % PRIORITY 0 ;
+
+NET "pclkx2" TNM_NET = "TNM_PCLKX2";
+TIMESPEC "TS_PCLKX2" = PERIOD "TNM_PCLKX2" TS_PCLK * 2;
+
+NET "pclkx10" TNM_NET = "TNM_PCLKX10";
+TIMESPEC "TS_PCLKX10" = PERIOD "TNM_PCLKX10" TS_PCLK * 10;
+
+#
+# Multi-cycle paths
+#
+TIMEGRP "bramgrp" = RAMS(enc0/pixel2x/dataint<*>);  
+TIMEGRP "fddbgrp" = FFS(enc0/pixel2x/db<*>);
+TIMEGRP "bramra" = FFS(enc0/pixel2x/ra<*>);
+
+TIMESPEC "TS_ramdo" = FROM "bramgrp" TO "fddbgrp" TS_PCLK;
+TIMESPEC "TS_ramra" = FROM "bramra" TO "fddbgrp" TS_PCLK;
