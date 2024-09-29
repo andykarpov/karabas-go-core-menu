@@ -165,6 +165,10 @@ signal vga_r_r, vga_g_r, vga_b_r, vga_r_r2, vga_g_r2, vga_b_r2 : std_logic_vecto
 signal vga_hs_r, vga_vs_r, vga_hs_r2, vga_vs_r2 : std_logic;
 signal ft_de_r, ft_de_r2 : std_logic;
 
+-- regs for int video
+signal osd_rgb_r, osd_rgb_r2 : std_logic_vector(23 downto 0);
+signal hsync_r, hsync_r2, vsync_r, vsync_r2, blank_r, blank_r2: std_logic;
+
 begin
 
 TAPE_OUT <= '0';
@@ -201,7 +205,7 @@ FT_RESET <= '1';
 sysclk_ibuf: IBUF port map(I => CLK_50MHZ, O => sysclk);
 sysclk_bufg: BUFG port map(I => sysclk, O => sysclk_buf);
 
--- 25 MHz PLL
+-- 40 MHz PLL
 pll1: PLL_BASE
 generic map(
 	BANDWIDTH => "OPTIMIZED",
@@ -210,7 +214,7 @@ generic map(
 	DIVCLK_DIVIDE => 1,
 	CLKFBOUT_MULT => 8,
 	CLKFBOUT_PHASE => 0.000,
-	CLKOUT0_DIVIDE => 16,
+	CLKOUT0_DIVIDE => 10,
 	CLKOUT0_PHASE => 0.000,
 	CLKOUT0_DUTY_CYCLE => 0.500,
 	CLKIN_PERIOD => 20.0,
@@ -295,6 +299,10 @@ port map(
 
 -- OSD
 osd_inst: entity work.overlay
+generic map(
+	WIDTH => 800,
+	HEIGHT => 600
+)
 port map(
 	CLK => clk_vga_buf,
 	RGB_I => red & green & blue,
@@ -351,15 +359,26 @@ begin
 		vga_hs_r2 <= vga_hs_r;
 		vga_vs_r2 <= vga_vs_r;
 		ft_de_r2 <= ft_de_r;
+		
+		osd_rgb_r <= osd_rgb;
+		hsync_r <= hsync;
+		vsync_r <= vsync;
+		blank_r <= blank;
+
+		osd_rgb_r2 <= osd_rgb_r;
+		hsync_r2 <= hsync_r;
+		vsync_r2 <= vsync_r;
+		blank_r2 <= blank_r;
+		
 	end if;
 end process;
 
-host_vga_r <= vga_r_r2 when ft_vga_on = '1' else osd_rgb(23 downto 16) when blank = '0' else "00000000";
-host_vga_g <= vga_g_r2 when ft_vga_on = '1' else osd_rgb(15 downto 8) when blank = '0' else "00000000";
-host_vga_b <= vga_b_r2 when ft_vga_on = '1' else osd_rgb(7 downto 0) when blank = '0' else "00000000";
-host_vga_hs <= vga_hs_r2 when ft_vga_on = '1' else hsync;
-host_vga_vs <= vga_vs_r2 when ft_vga_on = '1' else vsync;
-host_vga_blank <= not(ft_de_r2) when ft_vga_on = '1' else blank;
+host_vga_r <= vga_r_r2 when ft_vga_on = '1' else osd_rgb_r2(23 downto 16) when blank_r2 = '0' else "00000000";
+host_vga_g <= vga_g_r2 when ft_vga_on = '1' else osd_rgb_r2(15 downto 8) when blank_r2 = '0' else "00000000";
+host_vga_b <= vga_b_r2 when ft_vga_on = '1' else osd_rgb_r2(7 downto 0) when blank_r2 = '0' else "00000000";
+host_vga_hs <= vga_hs_r2 when ft_vga_on = '1' else hsync_r2;
+host_vga_vs <= vga_vs_r2 when ft_vga_on = '1' else vsync_r2;
+host_vga_blank <= not(ft_de_r2) when ft_vga_on = '1' else blank_r2;
 
 FT_CLK_IBUF0: IBUF
 port map (

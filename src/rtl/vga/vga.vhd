@@ -18,6 +18,7 @@ architecture Behavioral of vga_sync is
 
 -- ModeLine " 640x 480@60Hz"  25.20  640  656  752  800  480  490  492  525 -HSync -VSync
 -- ModeLine " 720x 480@60Hz"  27.00  720  736  798  858  480  489  495  525 -HSync -VSync
+
 -- Modeline " 800x 600@60Hz"  40.00  800  840  968 1056  600  601  605  628 +HSync +VSync
 -- Modeline "1024x 600@60Hz"  48.96 1024 1064 1168 1312  600  601  604  622 -HSync +Vsync
 -- ModeLine "1024x 768@60Hz"  65.00 1024 1048 1184 1344  768  771  777  806 -HSync -VSync
@@ -31,15 +32,18 @@ architecture Behavioral of vga_sync is
 -- ModeLine "1920x1080@30Hz"  89.01 1920 2448 2492 2640 1080 1084 1089 1125 +HSync +VSync
 
 -- Horizontal Timing constants  
-constant h_pixels_across	: integer := 640 - 1;
-constant h_sync_on		: integer := 656 - 1;
-constant h_sync_off		: integer := 752 - 1;
-constant h_end_count		: integer := 800 - 1;
+constant h_pixels_across	: integer := 800 - 1;
+constant h_sync_on		: integer := 840 - 1;
+constant h_sync_off		: integer := 968 - 1;
+constant h_end_count		: integer := 1056 - 1;
 -- Vertical Timing constants
-constant v_pixels_down		: integer := 480 - 1;
-constant v_sync_on		: integer := 490 - 1;
-constant v_sync_off		: integer := 492 - 1;
-constant v_end_count		: integer := 525 - 1;
+constant v_pixels_down		: integer := 600 - 1;
+constant v_sync_on		: integer := 601 - 1;
+constant v_sync_off		: integer := 605 - 1;
+constant v_end_count		: integer := 628 - 1;
+-- Sync Polarity
+constant h_sync_pol 		: std_logic := '1';
+constant v_sync_pol		: std_logic := '1';
 
 signal hcnt		: std_logic_vector(11 downto 0) := "000000000000"; 	-- horizontal pixel counter
 signal vcnt		: std_logic_vector(11 downto 0) := "000000000000"; 	-- vertical line counter
@@ -69,8 +73,8 @@ begin
 	end if;
 end process;
 
-hsync	<= '1' when (hcnt <= h_sync_on) or (hcnt > h_sync_off) else '0';
-vsync	<= '1' when (vcnt <= v_sync_on) or (vcnt > v_sync_off) else '0';
+hsync	<= not(h_sync_pol) when (hcnt <= h_sync_on) or (hcnt > h_sync_off) else h_sync_pol;
+vsync	<= not(v_sync_pol) when (vcnt <= v_sync_on) or (vcnt > v_sync_off) else v_sync_pol;
 blank	<= '1' when (hcnt > h_pixels_across) or (vcnt > v_pixels_down) else '0';
 hpos <= hcnt;
 vpos <= vcnt;
