@@ -124,11 +124,12 @@ signal areset 		: std_logic;
 
 signal sysclk, sysclk_buf   : std_logic;
 signal clk_vga, clk_vga_buf : std_logic;
+signal clk_160, clk_160_buf : std_logic;
 signal clkpll1_fbout, clkpll1_fbout_buf : std_logic;
 signal clkfbout : std_logic;
-signal pllclk0, pllclk1, pllclk2 : std_logic;
+signal pllclk0, pllclk1, pllclk2,pllclk3 : std_logic;
 signal pll_lckd, pclk_lckd : std_logic;
-signal pclk, pclkx2, pclkx10 : std_logic;
+signal pclk, pclkx2, pclkx10, pclkd2 : std_logic;
 signal serdesstrobe : std_logic;
 signal bufpll_lock: std_logic;
 signal serdes_rst : std_logic := '0';
@@ -138,6 +139,7 @@ signal toggle : std_logic := '0';
 signal tmdsint : std_logic_vector(2 downto 0);
 
 signal v_clk_int : std_logic;
+signal adc_clk_int : std_logic;
 
 signal osd_rgb : std_logic_vector(23 downto 0);
 signal osd_command: std_logic_vector(15 downto 0);
@@ -168,6 +170,12 @@ signal ft_de_r, ft_de_r2 : std_logic;
 -- regs for int video
 signal osd_rgb_r, osd_rgb_r2 : std_logic_vector(23 downto 0);
 signal hsync_r, hsync_r2, vsync_r, vsync_r2, blank_r, blank_r2: std_logic;
+
+signal hdmi_reset, hdmi_reset2 : std_logic;
+
+signal hdmi_freq, prev_hdmi_freq : std_logic_vector(31 downto 0);
+signal freq_changed : std_logic; 
+signal adc_div2 : std_logic;
 
 begin
 
@@ -214,9 +222,12 @@ generic map(
 	DIVCLK_DIVIDE => 1,
 	CLKFBOUT_MULT => 8,
 	CLKFBOUT_PHASE => 0.000,
-	CLKOUT0_DIVIDE => 10,
+	CLKOUT0_DIVIDE => 10, -- 50*8/10 = 40 MHz
 	CLKOUT0_PHASE => 0.000,
 	CLKOUT0_DUTY_CYCLE => 0.500,
+	CLKOUT1_DIVIDE => 2, -- 50*8/2= 200 MHz
+	CLKOUT1_PHASE => 0.000,
+	CLKOUT1_DUTY_CYCLE => 0.500,	
 	CLKIN_PERIOD => 20.0,
 	REF_JITTER => 0.010
 )
@@ -225,6 +236,7 @@ port map(
 	RST => '0',
 
 	CLKOUT0 => clk_vga,
+	CLKOUT1 => clk_160,
 	LOCKED => locked,
 	
 	CLKFBIN => clkpll1_fbout_buf,
@@ -233,6 +245,8 @@ port map(
 
 sysclkf_buf0: BUFG port map(O => clkpll1_fbout_buf, I => clkpll1_fbout);
 clk_vga_buf0: BUFG port map(O => clk_vga_buf, I => clk_vga);
+clk_160_buf0: BUFG port map(O => clk_160_buf, I => clk_160);
+
 areset <= not locked;
 
 -- PLL 1x, 2x, 10x 
@@ -244,6 +258,7 @@ generic map(
 	CLKOUT0_DIVIDE => 1,
 	CLKOUT1_DIVIDE => 10,
 	CLKOUT2_DIVIDE => 5,
+	CLKOUT3_DIVIDE => 20,
 	COMPENSATION => "INTERNAL"	
 )
 port map (
@@ -251,10 +266,11 @@ port map (
 	CLKOUT0 => pllclk0,
 	CLKOUT1 => pllclk1,
 	CLKOUT2 => pllclk2,
+	CLKOUT3 => pllclk3,
 	LOCKED => pll_lckd,
 	CLKFBIN => clkfbout,
 	CLKIN => v_clk_int,
-	RST => reset_pll2 -- not(pclk_lckd)
+	RST => reset_pll2 or not(pclk_lckd)
   );
   
   pclk_lckd <= locked;
@@ -284,6 +300,7 @@ port map (
 
 pclkbufg: BUFG port map (I => pllclk1, O => pclk);
 pclkx2bufg: BUFG port map (I => pllclk2, O => pclkx2);
+pclkd2bufg: BUFG port map (I => pllclk3, O => pclkd2);
 
 -- VGA SYNC
 vga_sync_inst: entity work.vga_sync
@@ -337,7 +354,9 @@ port map(
 	SD2_CS_N => SD_CS_N,
 	SD2_MOSI => SD_DI,
 	SD2_MISO => SD_DO,
-	SD2_SCK => SD_CLK
+	SD2_SCK => SD_CLK,
+	
+	DEBUG => hdmi_freq(27 downto 12)
 );
 
 red	<= (hcnt(7 downto 0) + shift) and "11111111";
@@ -379,6 +398,18 @@ host_vga_b <= vga_b_r2 when ft_vga_on = '1' else osd_rgb_r2(7 downto 0) when bla
 host_vga_hs <= vga_hs_r2 when ft_vga_on = '1' else hsync_r2;
 host_vga_vs <= vga_vs_r2 when ft_vga_on = '1' else vsync_r2;
 host_vga_blank <= not(ft_de_r2) when ft_vga_on = '1' else blank_r2;
+hdmi_reset <= areset or freq_changed; -- or reset_pll2 or freq_changed;
+
+process (pclk)
+begin
+	if rising_edge(pclk) then
+		freq_changed <= '0';
+		prev_hdmi_freq <= hdmi_freq;
+		if hdmi_freq /= prev_hdmi_freq then 
+			freq_changed <= '1';
+		end if;
+	end if;
+end process;
 
 FT_CLK_IBUF0: IBUF
 port map (
@@ -400,23 +431,53 @@ port map (
  S       => ft_vga_on
 );
 
--- TODO: HDMI
+-- freq_meter
+fm0: entity work.freq_counter
+port map(
+	i_clk_ref => clk_160_buf,
+	i_clk_test => pclk,
+	i_reset => areset,
+	o_freq => hdmi_freq
+);
 
--- todo: replace to hdmi with sound
-enc0 : entity work.dvi_encoder
+--hdmi_freq <= x"02625A00"; -- 40
+
+-- HDMI
+
+--enc0 : entity work.dvi_encoder
+--port map (
+--    clkin => pclk,
+--    clkx2in => pclkx2,
+--    rstin => areset,
+--    blue_din => host_vga_b,
+--    green_din => host_vga_g,
+--    red_din => host_vga_r,
+--    hsync => host_vga_hs,
+--    vsync => host_vga_vs,
+--    de => not host_vga_blank,
+--    tmds_data0 => tmds_red,
+--    tmds_data1 => tmds_green,
+--    tmds_data2 => tmds_blue);
+	 
+enc0: entity work.hdmi
 port map (
-    clkin => pclk,
-    clkx2in => pclkx2,
-    rstin => areset,
-    blue_din => host_vga_b,
-    green_din => host_vga_g,
-    red_din => host_vga_r,
-    hsync => host_vga_hs,
-    vsync => host_vga_vs,
-    de => not host_vga_blank,
-    tmds_data0 => tmds_red,
-    tmds_data1 => tmds_green,
-    tmds_data2 => tmds_blue);
+	I_CLK_PIXEL => pclk,
+	I_CLK_PIXELX2 => pclkx2,
+	I_FREQ => hdmi_freq, 
+	I_RESET => hdmi_reset, 
+	I_R => host_vga_r,
+	I_G => host_vga_g,
+	I_B => host_vga_b,
+	I_BLANK => host_vga_blank,
+	I_HSYNC => host_vga_hs,
+	I_VSYNC => host_vga_vs,
+	I_AUDIO_ENABLE => '1',
+	I_AUDIO_PCM_L => audio_mix_l,
+	I_AUDIO_PCM_R => audio_mix_r,
+	O_RED => tmds_red,
+	O_GREEN => tmds_green,
+	O_BLUE => tmds_blue
+);
 	 
 -- DVI serializers and OB
 	 
@@ -509,10 +570,22 @@ port map(
 );
 
 -- ADC
+
+ADC_CLK_MUX : BUFGMUX_1
+port map (
+ I0      => pclk,
+ I1      => pclkd2,
+ O       => adc_clk_int,
+ S       => adc_div2
+);
+
+adc_div2 <= '1' when hdmi_freq > 40000000 else '0';
+
+-- todo: use pclk/2 if hdmi_freq > 40
 adc : entity work.i2s_transceiver
 port map(
 	reset_n => not(areset),
-	mclk => v_clk_int,
+	mclk => adc_clk_int,
 	sclk => ADC_BCK,
 	ws => ADC_LRCK,
 	sd_tx => open,
@@ -527,8 +600,8 @@ port map(
 ODDR2_ADC: ODDR2
 port map(
 	Q => ADC_CLK,
-	C0 => v_clk_int,
-	C1 => not(v_clk_int),
+	C0 => adc_clk_int,
+	C1 => not(adc_clk_int),
 	CE => '1',
 	D0 => '1',
 	D1 => '0',
