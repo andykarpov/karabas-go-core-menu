@@ -29,7 +29,7 @@ entity hdmi is
       I_CLK_PIXEL    : in std_logic;
 		I_CLK_PIXELX2	: in std_logic;
 		I_RESET : in std_logic;
-		I_FREQ : std_logic_vector(31 downto 0);
+		I_FREQ : std_logic_vector(7 downto 0);
       -- components
       I_R            : in std_logic_vector(7 downto 0);
       I_G            : in std_logic_vector(7 downto 0);
@@ -60,7 +60,7 @@ generic
 );
 port (
    i_pixclk : in std_logic;
-	i_freq : in std_logic_vector(31 downto 0);
+	i_freq : in std_logic_vector(7 downto 0);
 	i_reset : in std_logic;
    i_hSync     : in std_logic;
    i_vSync     : in std_logic;

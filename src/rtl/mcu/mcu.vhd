@@ -74,7 +74,7 @@ begin
 		  spi_miso_o     => spi_miso,
 
 		  di_req_o       => open,
-		  di_i           => CMD_DEBUG_DATA & DEBUG,
+		  di_i           => CMD_NOPE & x"0000",
 		  wren_i         => '1',
 		  
 		  do_valid_o     => spi_do_valid,

@@ -12,7 +12,7 @@ module hdmidataencoder
 #(FS=48000, N=6144) 
 (
    input          i_pixclk,
-	input [31:0]   i_freq,
+	input [7:0]   i_freq,
 	input          i_reset,
    input          i_hSync,
    input          i_vSync,
@@ -35,8 +35,8 @@ reg [55:0] audioRegenPacket;
 
 always @(posedge i_pixclk)
 begin
-	AUDIO_TIMER_LIMIT <= i_freq / 1000;
-	CTS <= i_freq / 1000;
+	AUDIO_TIMER_LIMIT <= i_freq * 1000;
+	CTS <= i_freq * 1000;
 	audioRegenPacket <= {N[7:0], N[15:8], 8'h00, CTS[7:0], CTS[15:8], 16'h0000};
 end
 

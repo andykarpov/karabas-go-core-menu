@@ -124,7 +124,7 @@ signal areset 		: std_logic;
 
 signal sysclk, sysclk_buf   : std_logic;
 signal clk_vga, clk_vga_buf : std_logic;
-signal clk_160, clk_160_buf : std_logic;
+signal clk_ref, clk_ref_buf : std_logic;
 signal clkpll1_fbout, clkpll1_fbout_buf : std_logic;
 signal clkfbout : std_logic;
 signal pllclk0, pllclk1, pllclk2,pllclk3 : std_logic;
@@ -173,8 +173,8 @@ signal hsync_r, hsync_r2, vsync_r, vsync_r2, blank_r, blank_r2: std_logic;
 
 signal hdmi_reset, hdmi_reset2 : std_logic;
 
-signal hdmi_freq, prev_hdmi_freq : std_logic_vector(31 downto 0);
-signal freq_changed : std_logic; 
+signal hdmi_freq, prev_hdmi_freq : std_logic_vector(7 downto 0);
+signal freq_changed, freq_changed2 : std_logic; 
 signal adc_div2 : std_logic;
 
 begin
@@ -225,9 +225,9 @@ generic map(
 	CLKOUT0_DIVIDE => 10, -- 50*8/10 = 40 MHz
 	CLKOUT0_PHASE => 0.000,
 	CLKOUT0_DUTY_CYCLE => 0.500,
-	CLKOUT1_DIVIDE => 2, -- 50*8/2= 200 MHz
-	CLKOUT1_PHASE => 0.000,
-	CLKOUT1_DUTY_CYCLE => 0.500,	
+--	CLKOUT1_DIVIDE => 4, -- 50*8/4 = 100 MHz
+--	CLKOUT1_PHASE => 0.000,
+--	CLKOUT1_DUTY_CYCLE => 0.500,	
 	CLKIN_PERIOD => 20.0,
 	REF_JITTER => 0.010
 )
@@ -236,7 +236,7 @@ port map(
 	RST => '0',
 
 	CLKOUT0 => clk_vga,
-	CLKOUT1 => clk_160,
+--	CLKOUT1 => clk_ref,
 	LOCKED => locked,
 	
 	CLKFBIN => clkpll1_fbout_buf,
@@ -245,7 +245,7 @@ port map(
 
 sysclkf_buf0: BUFG port map(O => clkpll1_fbout_buf, I => clkpll1_fbout);
 clk_vga_buf0: BUFG port map(O => clk_vga_buf, I => clk_vga);
-clk_160_buf0: BUFG port map(O => clk_160_buf, I => clk_160);
+--clk_ref_buf0: BUFG port map(O => clk_ref_buf, I => clk_ref);
 
 areset <= not locked;
 
@@ -255,10 +255,10 @@ pll2: PLL_BASE
 generic map(
 	CLKIN_PERIOD => 13.0,
 	CLKFBOUT_MULT => 10, -- set VCO to 10x of CLKIN
-	CLKOUT0_DIVIDE => 1,
-	CLKOUT1_DIVIDE => 10,
-	CLKOUT2_DIVIDE => 5,
-	CLKOUT3_DIVIDE => 20,
+	CLKOUT0_DIVIDE => 1, -- x10
+	CLKOUT1_DIVIDE => 10, -- x1
+	CLKOUT2_DIVIDE => 5,  -- x2
+	CLKOUT3_DIVIDE => 20, -- d2
 	COMPENSATION => "INTERNAL"	
 )
 port map (
@@ -356,7 +356,7 @@ port map(
 	SD2_MISO => SD_DO,
 	SD2_SCK => SD_CLK,
 	
-	DEBUG => hdmi_freq(27 downto 12)
+	DEBUG => x"0000"
 );
 
 red	<= (hcnt(7 downto 0) + shift) and "11111111";
@@ -398,8 +398,9 @@ host_vga_b <= vga_b_r2 when ft_vga_on = '1' else osd_rgb_r2(7 downto 0) when bla
 host_vga_hs <= vga_hs_r2 when ft_vga_on = '1' else hsync_r2;
 host_vga_vs <= vga_vs_r2 when ft_vga_on = '1' else vsync_r2;
 host_vga_blank <= not(ft_de_r2) when ft_vga_on = '1' else blank_r2;
-hdmi_reset <= areset or freq_changed; -- or reset_pll2 or freq_changed;
+hdmi_reset <= areset or freq_changed2; -- or reset_pll2 or freq_changed;
 
+-- сигнал изменения частоты клока
 process (pclk)
 begin
 	if rising_edge(pclk) then
@@ -410,6 +411,21 @@ begin
 		end if;
 	end if;
 end process;
+
+freq_changed_delay0: SRL16E 
+generic map(
+	INIT => x"00"
+)
+port map(
+	D => freq_changed,
+	CLK => pclk,
+	CE => '1',
+	A0 => '1',
+	A1 => '1',
+	A2 => '1',
+	A3 => '1',
+	Q => freq_changed2
+);
 
 FT_CLK_IBUF0: IBUF
 port map (
@@ -434,13 +450,11 @@ port map (
 -- freq_meter
 fm0: entity work.freq_counter
 port map(
-	i_clk_ref => clk_160_buf,
+	i_clk_ref => clk_vga_buf,
 	i_clk_test => pclk,
 	i_reset => areset,
 	o_freq => hdmi_freq
 );
-
---hdmi_freq <= x"02625A00"; -- 40
 
 -- HDMI
 
@@ -579,9 +593,9 @@ port map (
  S       => adc_div2
 );
 
-adc_div2 <= '1' when hdmi_freq > 40000000 else '0';
+adc_div2 <= '1' when hdmi_freq > 32 else '0';
 
--- todo: use pclk/2 if hdmi_freq > 40
+-- todo: use pclk/2 if hdmi_freq > 32 MHz
 adc : entity work.i2s_transceiver
 port map(
 	reset_n => not(areset),
