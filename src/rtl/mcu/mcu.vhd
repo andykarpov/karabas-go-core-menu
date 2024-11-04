@@ -30,6 +30,7 @@ entity mcu is
 	 FT_MOSI	  : out std_logic := '1';
 	 FT_MISO	  : in  std_logic := '1';
 	 FT_CS_N   : out std_logic := '1';
+	 FT_RESET  : out std_logic := '0'; -- ft hw reset by mcu side (active 1)
 	 
 	 -- sd2 exclusive access by mcu
 	 SD2_SCK	  : out std_logic := '1';
@@ -112,7 +113,9 @@ begin
 					when CMD_CONTROL => 
 								FT_SPI_ON <= spi_do(0);
 								FT_VGA_ON <= spi_do(1);
-
+								-- 2 = enable sd2
+								-- 3 = enable esp8266
+								FT_RESET <= spi_do(4);
 					-- nope
 					when CMD_NOPE => null;
 					

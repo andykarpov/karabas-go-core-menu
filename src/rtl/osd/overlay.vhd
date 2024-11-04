@@ -5,8 +5,8 @@ use IEEE.std_logic_unsigned.all;
 
 entity overlay is
 	generic (
-		WIDTH		: integer := 640;
-		HEIGHT   : integer := 480
+		WIDTH		: integer := 800;
+		HEIGHT   : integer := 600
 	);
 	port (
 		CLK		: in std_logic;
