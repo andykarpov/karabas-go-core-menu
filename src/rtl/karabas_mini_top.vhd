@@ -148,7 +148,7 @@ signal clk0, clkfx, clkfx180, clkdv, clkfbout : std_logic;
 signal pll_rst_cnt : std_logic_vector(7 downto 0) := "00000000";
 signal pll_rst : std_logic;
 signal prev_vdac2_sel : std_logic;
-signal v_clk_div2, adc_clk_int, adc_div2 : std_logic;
+signal p_clk_div2, adc_clk_int, adc_div2 : std_logic;
 signal hdmi_freq : std_logic_vector(7 downto 0);
 signal p_clk_int : std_logic;
 signal hdmi_reset : std_logic;
@@ -231,11 +231,11 @@ port map(
 clkout1_buf: BUFG port map (O => clk_hdmi, I => clkfx);
 clkout2_buf: BUFG port map (O => clk_hdmi_n, I => clkfx180);
 clkout3_buf: BUFG port map (O => p_clk_int, I => clk0);
-clkout4_buf: BUFG port map (O => v_clk_div2, I => clkdv);
+clkout4_buf: BUFG port map (O => p_clk_div2, I => clkdv);
 
-process (v_clk_int)
+process (p_clk_int)
 begin
-	if rising_edge(v_clk_int) then
+	if rising_edge(p_clk_int) then
 		if ((prev_vdac2_sel /= ft_vga_on) or areset = '1' or hdmi_reset = '1') then
 			pll_rst_cnt <= (others => '0');
 		end if;
@@ -251,7 +251,7 @@ pll_rst <= pll_rst_cnt(7);
 -- VGA SYNC
 vga_sync_inst: entity work.vga_sync
 port map(
-	CLK => v_clk_int,
+	CLK => p_clk_int,
 	HSYNC => hsync,
 	VSYNC => vsync,
 	BLANK => blank,
@@ -263,7 +263,7 @@ port map(
 -- OSD
 osd_inst: entity work.overlay
 port map(
-	CLK => v_clk_int,
+	CLK => p_clk_int,
 	RGB_I => red & green & blue,
 	RGB_O => osd_rgb,
 	HCNT_I => hcnt,
@@ -317,9 +317,9 @@ vga_hs_buf0: IBUF port map (I => VGA_HS, O => vga_hs_buf);
 vga_vs_buf0: IBUF port map (I => VGA_VS, O => vga_vs_buf);
 ft_de_buf0: IBUF port map (I => FT_DE, O => ft_de_buf);
 
-process(v_clk_int)
+process(p_clk_int)
 begin
-	if rising_edge(v_clk_int) then
+	if rising_edge(p_clk_int) then
 		if (ft_vga_on = '1') then
 			host_vga_hs_r <= vga_hs_buf;
 			host_vga_vs_r <= vga_vs_buf;
@@ -367,7 +367,7 @@ generic map(
 )
 port map(
 	i_clk_ref => clk_vga,
-	i_clk_test => v_clk_int,
+	i_clk_test => p_clk_int,
 	i_reset => areset,
 	o_freq => hdmi_freq
 );
@@ -379,7 +379,7 @@ generic map(
 	N => 6144
 )
 port map(
-	I_CLK_PIXEL => v_clk_int,
+	I_CLK_PIXEL => p_clk_int,
 	I_RESET => hdmi_reset or not(lockedx5),
 	I_FREQ => hdmi_freq,
 	I_R => host_vga_r,
@@ -398,7 +398,7 @@ port map(
 
 hdmio: entity work.hdmi_out_xilinx
 port map(
-	clock_pixel_i => v_clk_int,
+	clock_pixel_i => p_clk_int,
 	clock_tdms_i => clk_hdmi,
 	clock_tdms_n_i => clk_hdmi_n,
 	red_i => tmds_red,
@@ -411,7 +411,7 @@ port map(
 -- Sigma-Delta DAC
 dac_l : entity work.dac
 port map(
-	I_CLK => v_clk_int,
+	I_CLK => p_clk_int,
 	I_RESET => areset,
 	I_DATA => "00" & not(audio_mix_l(15)) & audio_mix_l(14 downto 4) & "00",
 	O_DAC => AUDIO_L
@@ -419,7 +419,7 @@ port map(
 
 dac_r : entity work.dac
 port map(
-	I_CLK => v_clk_int,
+	I_CLK => p_clk_int,
 	I_RESET => areset,
 	I_DATA => "00" & not(audio_mix_r(15)) & audio_mix_r(14 downto 4) & "00",
 	O_DAC => AUDIO_R
@@ -428,8 +428,8 @@ port map(
 -- ADC
 adc_clk_mux: BUFGMUX 
 port map(
- I0 => v_clk_int,
- I1 => v_clk_div2,
+ I0 => p_clk_int,
+ I1 => p_clk_div2,
  O => adc_clk_int,
  S => adc_div2
 );
