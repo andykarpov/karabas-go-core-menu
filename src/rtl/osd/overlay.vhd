@@ -158,11 +158,9 @@ begin
 				  (attr(1) and attr(0)) & attr(1) & attr(1) & "00000";
 				  
     RGB_O <= 
-				rgb_fg when paper = '1' and (selector="1111" or selector="1001" or selector="1100" or selector="1110") else 
-            rgb_bg(23 downto 21) & RGB(23 downto 19) & 
-				rgb_bg(16 downto 14) & RGB(16 downto 12) & 
-				rgb_bg(7 downto 5) & RGB(7 downto 3) when paper = '1' and (selector="1011" or selector="1101" or selector="1000" or selector="1010") else 
-				--"000" & RGB(23 downto 19) & "000" & RGB(16 downto 12) & "000" & RGB(7 downto 3) when video_on = '1' else 
+				rgb_fg when rgb_fg /= x"000000" and paper = '1' and (selector="1111" or selector="1001" or selector="1100" or selector="1110") else 
+            rgb_bg when rgb_bg /= x"000000" and paper = '1' and (selector="1011" or selector="1101" or selector="1000" or selector="1010") else 
+				"000" & RGB(23 downto 19) & "000" & RGB(16 downto 12) & "000" & RGB(7 downto 3) when video_on = '1' else 
 				RGB;
 
 		--   MCU'  SPI

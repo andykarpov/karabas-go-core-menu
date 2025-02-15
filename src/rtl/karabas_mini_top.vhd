@@ -233,11 +233,11 @@ clkout2_buf: BUFG port map (O => clk_hdmi_n, I => clkfx180);
 clkout3_buf: BUFG port map (O => p_clk_int, I => clk0);
 clkout4_buf: BUFG port map (O => p_clk_div2, I => clkdv);
 
-process (p_clk_int)
+process (clk_vga)
 begin
-	if rising_edge(p_clk_int) then
+	if rising_edge(clk_vga) then
 		if ((prev_vdac2_sel /= ft_vga_on) or areset = '1' or hdmi_reset = '1') then
-			pll_rst_cnt <= (others => '0');
+			pll_rst_cnt <= "10000000";
 		end if;
 		prev_vdac2_sel <= ft_vga_on;
 		if (pll_rst_cnt > 0) then 
@@ -302,9 +302,12 @@ port map(
 
 FT_RESET <= not mcu_ft_reset;
 
-red	<= (hcnt(7 downto 0) + shift) and "11111111";
-green	<= (vcnt(7 downto 0) + shift) and "11111111";
-blue	<= (hcnt(7 downto 0) + vcnt(7 downto 0) - shift) and "11111111";
+--red	<= (hcnt(7 downto 0) + shift) and "11111111";
+--green	<= (vcnt(7 downto 0) + shift) and "11111111";
+--blue	<= (hcnt(7 downto 0) + vcnt(7 downto 0) - shift) and "11111111";
+red <= x"00";
+green <= x"00";
+blue <= x"00";
 
 --host_vga_r <= VGA_R when ft_vga_on = '1' else osd_rgb(23 downto 16) when blank = '0' else "00000000";
 --host_vga_g <= VGA_G when ft_vga_on = '1' else osd_rgb(15 downto 8) when blank = '0' else "00000000";
@@ -313,17 +316,17 @@ blue	<= (hcnt(7 downto 0) + vcnt(7 downto 0) - shift) and "11111111";
 --host_vga_vs <= VGA_VS when ft_vga_on = '1' else vsync;
 --host_vga_blank <= not(FT_DE) when ft_vga_on = '1' else blank;
 
-vga_hs_buf0: IBUF port map (I => VGA_HS, O => vga_hs_buf);
-vga_vs_buf0: IBUF port map (I => VGA_VS, O => vga_vs_buf);
-ft_de_buf0: IBUF port map (I => FT_DE, O => ft_de_buf);
+--vga_hs_buf0: IBUF port map (I => VGA_HS, O => vga_hs_buf);
+--vga_vs_buf0: IBUF port map (I => VGA_VS, O => vga_vs_buf);
+--ft_de_buf0: IBUF port map (I => FT_DE, O => ft_de_buf);
 
 process(p_clk_int)
 begin
 	if rising_edge(p_clk_int) then
 		if (ft_vga_on = '1') then
-			host_vga_hs_r <= vga_hs_buf;
-			host_vga_vs_r <= vga_vs_buf;
-			host_vga_blank_r <= not(ft_de_buf);
+			host_vga_hs_r <= VGA_HS;
+			host_vga_vs_r <= VGA_VS;
+			host_vga_blank_r <= not(FT_DE);
 			host_vga_r_r <= VGA_R;
 			host_vga_g_r <= VGA_G;
 			host_vga_b_r <= VGA_B;
@@ -353,7 +356,7 @@ host_vga_hs <= host_vga_hs_r2;
 host_vga_vs <= host_vga_vs_r2;
 host_vga_blank <= host_vga_blank_r2;
 
-V_CLK_MUX : BUFGMUX_1
+V_CLK_MUX : BUFGMUX
 port map (
  I0      => clk_vga,
  I1      => FT_CLK,
@@ -375,12 +378,12 @@ port map(
 -- TODO: HDMI
 hdmi: entity work.hdmi
 generic map(
-	FS => 48000,
+	FS => 32000,
 	N => 6144
 )
 port map(
 	I_CLK_PIXEL => p_clk_int,
-	I_RESET => hdmi_reset or not(lockedx5),
+	I_RESET => pll_rst or not(lockedx5),
 	I_FREQ => hdmi_freq,
 	I_R => host_vga_r,
 	I_G => host_vga_g,
