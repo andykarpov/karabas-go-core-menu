@@ -118,7 +118,7 @@ signal shift		: std_logic_vector(7 downto 0);
 signal red		: std_logic_vector(7 downto 0);
 signal green		: std_logic_vector(7 downto 0);
 signal blue		: std_logic_vector(7 downto 0);
-signal clk_vga		: std_logic;
+signal clk_vga, clk_8, clk_12		: std_logic;
 signal locked, lockedx5 : std_logic;
 signal areset 		: std_logic;
 signal v_clk_vga : std_logic;
@@ -183,7 +183,7 @@ SDR_RAS_N <= '1';
 --SD_CLK <= '1';
 --SD_CS_N <= '1';
 MIDI_IN <= '0';
-MIDI_CLK <= '0';
+--MIDI_CLK <= '0';
 MIDI_RST_N <= '1';
 --FT_RESET <= '1';
 
@@ -192,6 +192,8 @@ pll0_inst: entity work.pll
 port map(
 	CLK_IN1 => CLK_50MHZ,
 	CLK_OUT1 => clk_vga,
+	CLK_OUT2 => clk_8,
+	CLK_OUT3 => clk_12,
 	LOCKED => locked
 );
 
@@ -465,6 +467,33 @@ port map(
 	R => '0',
 	S => '0'
 );
+
+-- FT_CLK output buf
+ODDR2_FT: ODDR2
+port map(
+	Q => MCU_IO(4),
+	C0 => clk_8,
+	C1 => not(clk_8),
+	CE => '1',
+	D0 => '1',
+	D1 => '0',
+	R => '0',
+	S => '0'
+);
+
+-- MIDI_CLK output buf
+ODDR2_MIDI: ODDR2
+port map(
+	Q => MIDI_CLK,
+	C0 => clk_12,
+	C1 => not(clk_12),
+	CE => '1',
+	D0 => '1',
+	D1 => '0',
+	R => '0',
+	S => '0'
+);
+
 
 audio_mix_l <= adc_l(23 downto 8);
 audio_mix_r <= adc_r(23 downto 8);
