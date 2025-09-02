@@ -72,7 +72,7 @@ rgb_fifo rgb_fifo_ft(
 	.full()
 );
 
-rgb_fifo rgb_fifo_vga(
+/*rgb_fifo rgb_fifo_vga(
 	.rst(pll_reset),
 	.wr_clk(clk),
 	.din({vga_de, vga_hs, vga_vs, vga_rgb[23:0]}),
@@ -82,11 +82,16 @@ rgb_fifo rgb_fifo_vga(
 	.rd_en(lockedx5),
 	.empty(),
 	.full()
-);
+);*/
+
+assign vga_data = {vga_de, vga_hs, vga_vs, vga_rgb[23:0]};
 
 wire [15:0] audio_out_l, audio_out_r;
 
-audio_fifo audio_fifo_l(
+assign audio_out_l = audio_l[15:0];
+assign audio_out_r = audio_r[15:0];
+
+/*audio_fifo audio_fifo_l(
 	.rst(pll_reset),
 	.wr_clk(clk),
 	.din(audio_l[15:0]),
@@ -108,7 +113,7 @@ audio_fifo audio_fifo_r(
 	.rd_en(lockedx5),
 	.empty(),
 	.full()
-);
+);*/
 
 assign host_vga_r = (ft_sel ? (~ft_data[26] ? 8'b0 : ft_data[23:16]) : (~vga_data[26] ? 8'b0 : vga_data[23:16]));
 assign host_vga_g = (ft_sel ? (~ft_data[26] ? 8'b0 : ft_data[16:8]) : (~vga_data[26] ? 8'b0 : vga_data[15:8]));
