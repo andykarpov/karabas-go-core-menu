@@ -18,7 +18,6 @@ architecture Behavioral of vga_sync is
 
 -- ModeLine " 640x 480@60Hz"  25.20  640  656  752  800  480  490  492  525 -HSync -VSync
 -- ModeLine " 720x 480@60Hz"  27.00  720  736  798  858  480  489  495  525 -HSync -VSync
-
 -- Modeline " 800x 600@60Hz"  40.00  800  840  968 1056  600  601  605  628 +HSync +VSync
 -- Modeline "1024x 600@60Hz"  48.96 1024 1064 1168 1312  600  601  604  622 -HSync +Vsync
 -- ModeLine "1024x 768@60Hz"  65.00 1024 1048 1184 1344  768  771  777  806 -HSync -VSync
