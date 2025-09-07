@@ -188,7 +188,7 @@ IBUFG(.I(FT_CLK), .O(ft_clk_int));
 BUFGMUX v_clk_mux(.I0(clk_sys), .I1(ft_clk_int), .O(v_clk_int), .S(vdac2_sel));
 
 // hdmi
-hdmi_top hdmi_top(
+zhdmi_top #(.SAMPLERATE(192000), .CLKRATE(40000000)) zhdmi_top(
 	.clk				(v_clk_int),
 	.clk_ref			(clk_sys),
 	.clk_8			(clk_8mhz),
@@ -206,8 +206,8 @@ hdmi_top hdmi_top(
 
 	.ft_sel			(vdac2_sel),
 
-	.audio_l			(audio_mix_l[15:0]),
-	.audio_r			(audio_mix_r[15:0]),
+	.audio_l			(audio_mix_l),
+	.audio_r			(audio_mix_r),
 
 	.tmds_p			(TMDS_P),
 	.tmds_n			(TMDS_N)
