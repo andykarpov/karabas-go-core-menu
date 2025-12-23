@@ -232,7 +232,7 @@ wire [15:0] audio_mix_l = adc_l[23:8];
 wire [15:0] audio_mix_r = adc_r[23:8];
 
 // ------- DAC --------------
-PCM5102 PCM5102(
+PCM5102 #(.DAC_CLK_DIV_BITS(2)) PCM5102(
 	.clk				(clk_sys),
 	.reset			(areset),
 	.left				(audio_mix_l),
