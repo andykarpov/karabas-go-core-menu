@@ -184,7 +184,7 @@ IBUFG(.I(FT_CLK), .O(ft_clk_int));
 BUFGMUX v_clk_mux(.I0(clk_sys), .I1(ft_clk_int), .O(v_clk_int), .S(vdac2_sel));
 
 // hdmi
-zhdmi_top #(.SAMPLERATE(192000), .CLKRATE(40000000)) zhdmi_top(
+hdmi_top hdmi_top(
 	.clk				(v_clk_int),
 	.clk_ref			(clk_sys),
 	.clk_8			(clk_8mhz),
@@ -202,6 +202,7 @@ zhdmi_top #(.SAMPLERATE(192000), .CLKRATE(40000000)) zhdmi_top(
 
 	.ft_sel			(vdac2_sel),
 
+	.audio_en		(~dvi_only),
 	.audio_l			(audio_mix_l),
 	.audio_r			(audio_mix_r),
 
@@ -245,6 +246,7 @@ PCM5102 #(.DAC_CLK_DIV_BITS(2)) PCM5102(
 //---------- MCU ------------
 wire [15:0] osd_command;
 wire mcu_ft_spi_on, mcu_ft_vga_on, mcu_ft_sck, mcu_ft_mosi, mcu_ft_cs_n, mcu_ft_reset, mcu_busy;
+wire dvi_only;
 mcu mcu(
 	.CLK				(clk_sys),
 	.N_RESET			(~areset),
@@ -279,6 +281,9 @@ mcu mcu(
 	.FT_MOSI			(mcu_ft_mosi),
 	.FT_CS_N			(mcu_ft_cs_n),
 	.FT_RESET		(mcu_ft_reset),
+	
+	.HWID				(),
+	.DVI_ONLY		(dvi_only),
 
 	.DEBUG_ADDR		(16'd0),
 	.DEBUG_DATA		(16'd0),
