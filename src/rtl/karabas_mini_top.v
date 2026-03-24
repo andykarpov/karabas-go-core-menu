@@ -254,6 +254,8 @@ wire [15:0] audio_mix_r = adc_r[23:8];
 //---------- MCU ------------
 wire [15:0] osd_command;
 wire mcu_ft_spi_on, mcu_ft_vga_on, mcu_ft_sck, mcu_ft_mosi, mcu_ft_cs_n, mcu_ft_reset, mcu_busy;
+wire [7:0] esp_uart_rx_data, esp_uart_tx_data;
+wire esp_uart_rx_wr, esp_uart_tx_wr;
 wire dvi_only;
 
 mcu mcu(
@@ -267,19 +269,11 @@ mcu mcu(
 
 	.MCU_SPI_FT_SS	(MCU_IO[3]),
 	.MCU_SPI_SD2_SS(MCU_IO[2]),
-
-	.RTC_A			(8'b0),
-	.RTC_DI			(8'b0),
-	.RTC_CS			(1'b1),
-	.RTC_WR_N		(1'b1),
-
-	.UART_TX_DATA	(8'b0),
-	.UART_TX_WR		(1'b0),
-	.UART_TX_MODE	(1'b0),
-	.UART_DLL		(8'b0),
-	.UART_DLM		(8'b0),
-	.UART_DLL_WR	(1'b0),
-	.UART_DLM_WR	(1'b0),
+	
+   .ESP_UART_TX_DATA   (esp_uart_tx_data),
+   .ESP_UART_TX_WR     (esp_uart_tx_wr),
+   .ESP_UART_RX_DATA   (esp_uart_rx_data),
+   .ESP_UART_RX_WR     (esp_uart_rx_wr),	
 
 	.OSD_COMMAND	(osd_command),
 
@@ -293,10 +287,22 @@ mcu mcu(
 
 	.DVI_ONLY		(dvi_only),
 	
-	.DEBUG_ADDR		(16'd0),
-	.DEBUG_DATA		(16'd0),
-
 	.BUSY				(mcu_busy)
+);
+
+//--------- ESP8266 SPI -------
+esp8266 esp8266(
+    .CLK                (clk_sys),
+    .RESET              (areset),
+    
+    .ESP_UART_RX_DATA   (esp_uart_rx_data),
+    .ESP_UART_RX_WR     (esp_uart_rx_wr),
+    .ESP_UART_TX_DATA   (esp_uart_tx_data),
+    .ESP_UART_TX_WR     (esp_uart_tx_wr),
+
+    .UART_RX            (UART_RX),
+    .UART_TX            (UART_TX),
+    .UART_CTS           (UART_CTS)
 );
 
 //--------- VGA sync ---------

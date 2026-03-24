@@ -141,7 +141,6 @@ assign FLASH_WP_N 	= 1'b1;
 assign FLASH_HOLD_N 	= 1'b1;
 assign TAPE_OUT 		= 1'b0;
 assign BEEPER 			= 1'b0;
-assign UART_CTS 		= 1'b0;
 assign WA 				= 3'b0;
 assign WCS_N 			= 2'b11;
 assign WRD_N 			= 1'b1;
@@ -217,6 +216,8 @@ assign DAC_MUTE = 1'b1; // soft mute, 0 = mute, 1 = unmute
 //---------- MCU ------------
 wire [15:0] osd_command;
 wire mcu_ft_spi_on, mcu_ft_vga_on, mcu_ft_sck, mcu_ft_mosi, mcu_ft_cs_n, mcu_ft_reset, mcu_busy;
+wire [7:0] esp_uart_rx_data, esp_uart_tx_data;
+wire esp_uart_rx_wr, esp_uart_tx_wr;
 mcu mcu(
 	.CLK				(clk_sys),
 	.N_RESET			(~areset),
@@ -229,18 +230,10 @@ mcu mcu(
 	.MCU_SPI_FT_SS	(MCU_SPI_FT_CS_N),
 	.MCU_SPI_SD2_SS(MCU_SPI_SD2_CS_N),
 
-	.RTC_A			(8'b0),
-	.RTC_DI			(8'b0),
-	.RTC_CS			(1'b1),
-	.RTC_WR_N		(1'b1),
-
-	.UART_TX_DATA	(8'b0),
-	.UART_TX_WR		(1'b0),
-	.UART_TX_MODE	(1'b0),
-	.UART_DLL		(8'b0),
-	.UART_DLM		(8'b0),
-	.UART_DLL_WR	(1'b0),
-	.UART_DLM_WR	(1'b0),
+   .ESP_UART_TX_DATA   (esp_uart_tx_data),
+   .ESP_UART_TX_WR     (esp_uart_tx_wr),
+   .ESP_UART_RX_DATA   (esp_uart_rx_data),
+   .ESP_UART_RX_WR     (esp_uart_rx_wr),	
 
 	.OSD_COMMAND	(osd_command),
 
@@ -252,10 +245,22 @@ mcu mcu(
 	.FT_CS_N			(mcu_ft_cs_n),
 	.FT_RESET		(mcu_ft_reset),
 
-	.DEBUG_ADDR		(16'd0),
-	.DEBUG_DATA		(16'd0),
-
 	.BUSY				(mcu_busy)
+);
+
+//--------- ESP8266 SPI -------
+esp8266 esp8266(
+    .CLK                (clk_sys),
+    .RESET              (areset),
+    
+    .ESP_UART_RX_DATA   (esp_uart_rx_data),
+    .ESP_UART_RX_WR     (esp_uart_rx_wr),
+    .ESP_UART_TX_DATA   (esp_uart_tx_data),
+    .ESP_UART_TX_WR     (esp_uart_tx_wr),
+
+    .UART_RX            (UART_RX),
+    .UART_TX            (UART_TX),
+    .UART_CTS           (UART_CTS)
 );
 
 //--------- VGA sync ---------
