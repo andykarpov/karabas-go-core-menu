@@ -218,13 +218,39 @@ NET "FLASH_SCK"     LOC="R11"  | IOSTANDARD = LVCMOS33; # CONF_CLK
 NET "FLASH_WP_N"    LOC="N12"  | IOSTANDARD = LVCMOS33; # CONF_IO2
 NET "FLASH_HOLD_N"  LOC="P12"  | IOSTANDARD = LVCMOS33; # CONF_IO3
 
-# Timings
+# Timing constraints. This block is the same in karabas_go.ucf, karabas_mini.ucf and karabas_minig.ucf; the parts
+# after it are those of the board (the video DAC of the Go, the FT812 and HDMI clocks of the Mini / Mini G).
+#
+# Clocks, all from one PLL on CLK_50MHZ (VCO 450 MHz), phase 0 (rtl/karabas_*_top.v):
+#   pll_clk<0> 40.91 MHz clk_sys: the menu (OSD and its 800 x 600 video, MCU link, ESP uart, ADC, DACs)
+#   pll_clk<1>  8.18 MHz clk_8:   FT_CLK_OUT and DCM_CLKGEN of the Mini / Mini G (on the Go: 12.16 MHz MIDI_CLK)
+#   pll_clk<2> 12.16 MHz          MIDI_CLK of the Mini
+# The PERIOD of CLK_50MHZ is derived onto every PLL output (and the HDMI DCMs). The ucf had PERIODs of 40 and 8 MHz
+# on clk_sys and clk_8 (they are 40.91 and 8.18), 30 MHz on MCU_SCK and a TIG on the measured FT frequency, a path
+# that is real. No clock comes from logic and there are no latches (the OSD had its counters, its pixel shifter and
+# its pixel load on the falling clk_sys).
+# ------------------------------------------------------------------------------------------------------------
+NET "CLK_50MHZ" TNM_NET = "CLK_50MHZ";
+TIMESPEC "TS_CLK_50MHZ" = PERIOD "CLK_50MHZ" 20 ns HIGH 50%;
 
-PIN "pll/clkout1_buf.O" CLOCK_DEDICATED_ROUTE = FALSE;
+# on the BUFG of clk_sys: the PLL output also drives the BUFGMUX of the HDMI pixel clock (Mini, Mini G)
+NET "clk_sys" TNM_NET = "TG_CLK_SYS";
 
-NET "clk_sys" TNM_NET = "clk_sys";
+# MCU link (kg_mcu): SPI mode 0 from the RP2040 at 16 MHz (bursts would go at that speed too, BURST_MAX_MHZ 0);
+# bounded at 32 MHz as in the other cores.
+NET "MCU_SCK" TNM_NET = "TG_CLK_MCU";
+TIMESPEC "TS_CLK_MCU" = PERIOD "TG_CLK_MCU" 32 MHz;
+# MCU_SCK is not related to CLK_50MHZ, the PERIODs do not cover the paths between it and clk_sys. kg_mcu crosses
+# with toggle synchronisers (2-3 flip-flops) and holds the data registers for 8 SCK periods (a received byte)
+# or from the request to the next SCK edges (a reply word): their data paths are bounded by one SCK period.
+TIMESPEC "TS_MCU_TO_SYS" = FROM "TG_CLK_MCU" TO "TG_CLK_SYS" 31.25 ns DATAPATHONLY;
+TIMESPEC "TS_SYS_TO_MCU" = FROM "TG_CLK_SYS" TO "TG_CLK_MCU" 31.25 ns DATAPATHONLY;
 
-TIMESPEC "TS_CLK_SYS" = PERIOD "clk_sys" 40 MHz;
-
-NET "MCU_SCK" TNM_NET = "clk_mcu";
-TIMESPEC "TS_CLK_MCU" = PERIOD "clk_mcu" 30 MHz;
+# ---- Go: the video DAC ------------------------------------------------------------------------------------------
+# V_CLK is the inverted clk_sys (through a LUT, as it was clk_sys): the DAC takes the pixels at the falling
+# clk_sys, half a period after the OSD changed them. The clock to the pad is not timed (it was not before either);
+# the pixels and syncs are bounded by half a period from their flip-flops to the pads.
+TIMEGRP "TG_VGA_OUT" = PADS("VGA_R<*>") PADS("VGA_G<*>") PADS("VGA_B<*>") PADS("VGA_HS") PADS("VGA_VS");
+TIMESPEC "TS_VGA_OUT" = FROM FFS TO "TG_VGA_OUT" 12 ns DATAPATHONLY;
+# clk_sys drives the LUT of V_CLK (with FT_CLK of the FT mode)
+PIN "bufg_clk_sys.O" CLOCK_DEDICATED_ROUTE = FALSE;

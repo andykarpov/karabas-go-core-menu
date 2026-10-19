@@ -1,4 +1,4 @@
-k# intermediate build files
+# intermediate build files
 *.bgn
 *.bit
 *.bld
@@ -66,3 +66,15 @@ xst/
 _ngo/
 _xmsgs/
 
+
+# build inputs of the boards (src/Makefile)
+!src/karabas_go.prj
+!src/karabas_mini.prj
+!src/karabas_minig.prj
+!src/karabas_go.xst
+!src/karabas_mini.xst
+!src/karabas_minig.xst
+!src/karabas_go.ut
+!src/karabas_mini.ut
+!src/karabas_minig.ut
+src/karabas_*_core.*

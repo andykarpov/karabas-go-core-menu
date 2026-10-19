@@ -35,8 +35,8 @@ localparam [11:0] v_sync_off = 605-1;
 localparam 			v_sync_pol = 1;
 localparam [11:0] v_end = 628-1;
 
-reg [11:0] hcnt;
-reg [11:0] vcnt;
+reg [11:0] hcnt = 12'd0;
+reg [11:0] vcnt = 12'd0;
 
 always @(posedge clk) begin
 	hcnt <= (hcnt == h_end) ? 0 : hcnt + 1;
