@@ -2,7 +2,7 @@
 # Backward-incompatible with lower Karabas-Mini revisions (added I2S DAC, ESP32 I2S, rerouted some CLK signals, removed MIDI_RESET, MIDI_CLK, ESP_RESET, ESP_BOOT)
 
 # Clocks
-NET "CLK_50MHZ"        LOC="T8" | IOSTANDARD = LVTTL | TNM_NET = "CLK_50MHZ";
+NET "CLK_50MHZ"        LOC="T8" | IOSTANDARD = LVTTL;
 
 VCCAUX = 3.3;
 
@@ -222,21 +222,65 @@ NET "FLASH_SCK"        LOC="R11"    | IOSTANDARD = LVCMOS33; # CONF_CLK
 NET "FLASH_WP_N"       LOC="N12"    | IOSTANDARD = LVCMOS33; # CONF_IO2
 NET "FLASH_HOLD_N"     LOC="P12"    | IOSTANDARD = LVCMOS33; # CONF_IO3
 
-# Timings
+# Timing constraints. This block is the same in karabas_go.ucf, karabas_mini.ucf and karabas_minig.ucf; the parts
+# after it are those of the board (the video DAC of the Go, the FT812 and HDMI clocks of the Mini / Mini G).
+#
+# Clocks, all from one PLL on CLK_50MHZ (VCO 450 MHz), phase 0 (rtl/karabas_*_top.v):
+#   pll_clk<0> 40.91 MHz clk_sys: the menu (OSD and its 800 x 600 video, MCU link, ESP uart, ADC, DACs)
+#   pll_clk<1>  8.18 MHz clk_8:   FT_CLK_OUT and DCM_CLKGEN of the Mini / Mini G (on the Go: 12.16 MHz MIDI_CLK)
+#   pll_clk<2> 12.16 MHz          MIDI_CLK of the Mini
+# The PERIOD of CLK_50MHZ is derived onto every PLL output (and the HDMI DCMs). The ucf had PERIODs of 40 and 8 MHz
+# on clk_sys and clk_8 (they are 40.91 and 8.18), 30 MHz on MCU_SCK and a TIG on the measured FT frequency, a path
+# that is real. No clock comes from logic and there are no latches (the OSD had its counters, its pixel shifter and
+# its pixel load on the falling clk_sys).
+# ------------------------------------------------------------------------------------------------------------
+NET "CLK_50MHZ" TNM_NET = "CLK_50MHZ";
+TIMESPEC "TS_CLK_50MHZ" = PERIOD "CLK_50MHZ" 20 ns HIGH 50%;
 
-NET "clk_sys" TNM_NET = "clk_sys";
-NET "clk_8mhz" TNM_NET = "clk_8mhz";
+# on the BUFG of clk_sys: the PLL output also drives the BUFGMUX of the HDMI pixel clock (Mini, Mini G)
+NET "clk_sys" TNM_NET = "TG_CLK_SYS";
 
-TIMESPEC "TS_CLK_SYS" = PERIOD "clk_sys" 40 MHz;
-TIMESPEC "TS_CLK_8" = PERIOD "clk_8mhz" 8 MHz;
+# MCU link (kg_mcu): SPI mode 0 from the RP2040 at 16 MHz (bursts would go at that speed too, BURST_MAX_MHZ 0);
+# bounded at 32 MHz as in the other cores.
+NET "MCU_SCK" TNM_NET = "TG_CLK_MCU";
+TIMESPEC "TS_CLK_MCU" = PERIOD "TG_CLK_MCU" 32 MHz;
+# MCU_SCK is not related to CLK_50MHZ, the PERIODs do not cover the paths between it and clk_sys. kg_mcu crosses
+# with toggle synchronisers (2-3 flip-flops) and holds the data registers for 8 SCK periods (a received byte)
+# or from the request to the next SCK edges (a reply word): their data paths are bounded by one SCK period.
+TIMESPEC "TS_MCU_TO_SYS" = FROM "TG_CLK_MCU" TO "TG_CLK_SYS" 31.25 ns DATAPATHONLY;
+TIMESPEC "TS_SYS_TO_MCU" = FROM "TG_CLK_SYS" TO "TG_CLK_MCU" 31.25 ns DATAPATHONLY;
 
-NET "FT_CLK" TNM_NET = "clk_ft";
-TIMESPEC "TS_CLK_FT" = PERIOD "clk_ft" 72 MHz;
-
-NET "MCU_SCK" TNM_NET = "clk_mcu";
-TIMESPEC "TS_CLK_MCU" = PERIOD "clk_mcu" 30 MHz;
-
-NET "hdmi_top/clk_hdmi" TNM_NET = "CLK_HDMI";
-NET "hdmi_top/clk_hdmi_n" TNM_NET = "CLK_HDMI_n";
-
-NET "hdmi_top/hdmi_pll/freq_counter_inst/o_freq*" TIG; // ignore detected freq
+# ---- Mini, Mini G: FT812 and HDMI -------------------------------------------------------------------------------
+# FT_CLK: the pixel clock of the FT812 (its video goes to HDMI with ft_sel = vdac2_sel), up to 80 MHz. The FT812
+# makes it from FT_CLK_OUT (clk_8) with its own PLL: the phase is not known.
+NET "FT_CLK" TNM_NET = "TG_CLK_FT";
+TIMESPEC "TS_CLK_FT" = PERIOD "TG_CLK_FT" 80 MHz HIGH 50%;
+# The pixel clock of HDMI (hdmi_pll, the BUFGMUX clkpllin): clk_sys in the mode of the menu (I0, derived from
+# CLK_50MHZ); in the FT mode the FT812 frequency, made by DCM_CLKGEN from clk_8 (I1; programmed by hdmi_pll after it
+# measured FT_CLK; the CLKFX of DCM_CLKGEN is not phase aligned with its input). DCM_SP makes the 5x serial clock,
+# within the CLKFX limit of the -2 part (333 MHz) up to 64 MHz: this PERIOD analyses the FT mode at 64 MHz (the menu
+# runs the FT812 at 40 MHz, mode 3 of the firmware). ngdbuild also derives one from clk_8 and the static
+# CLKFX_MULTIPLY, which relates the FT pixel clock to the clocks of the PLL; for the paths from clk_sys
+# TS_SYS_TO_PIX below replaces it.
+NET "hdmi_top/hdmi_pll/clkgen" TNM_NET = "TG_CLKGEN";
+TIMESPEC "TS_CLKGEN" = PERIOD "TG_CLKGEN" 64 MHz HIGH 50%;
+NET "hdmi_top/p_clk_int" TNM_NET = "TG_CLK_PIX"; # the output of the BUFGMUX clkpllin
+# clk_sys -> the pixel clock (from registers on the falling clk_sys in hdmi_top): the data paths bounded by one
+# clk_sys period. In the FT mode only synchronisers in hdmi_top take clk_sys registers (ft_sel, audio_en, the reset
+# of hdmi_tx, the audio sample toggle, a sample held for 1 / SAMPLERATE); the video of the menu is not used there.
+# In the mode of the menu both are the same clock (the BUFG of clk_sys and BUFGMUX I0 from one PLL output):
+# `make <board>-coremode` analyses the routed design without the PERIODs of the FT mode and this bound, so these
+# paths get the setup and hold of clk_sys.
+TIMESPEC "TS_SYS_TO_PIX" = FROM "TG_CLK_SYS" TO "TG_CLK_PIX" 24.4 ns DATAPATHONLY;
+# FT812 video: taken at the falling FT_CLK, then into the pixel clock through kg_async_fifo (the pixel clock has the
+# frequency of FT_CLK, both from clk_8, and an unknown phase): its Gray pointers and its memory cross, bounded by
+# one FT_CLK period (a pointer is taken one clock later, a word read two clocks after its write at the earliest).
+# The reset of its write side (tx_reset_a, from clk_sys and the DCM) is released on FT_CLK through two flip-flops.
+TIMESPEC "TS_FT_TO_PIX" = FROM "TG_CLK_FT" TO "TG_CLK_PIX" 12.5 ns DATAPATHONLY;
+TIMESPEC "TS_PIX_TO_FT" = FROM "TG_CLK_PIX" TO "TG_CLK_FT" 12.5 ns DATAPATHONLY;
+TIMESPEC "TS_SYS_TO_FT" = FROM "TG_CLK_SYS" TO "TG_CLK_FT" 12.5 ns DATAPATHONLY;
+# hdmi_pll measures FT_CLK on clk_sys (freq_counter: a counter bit through two flip-flops).
+TIMESPEC "TS_FT_TO_SYS" = FROM "TG_CLK_FT" TO "TG_CLK_SYS" 12.5 ns DATAPATHONLY;
+# The select of the BUFGMUX of hdmi_pll (mux_sel = vdac2_sel, a clk_sys register): a BUFGMUX switches without a
+# glitch at any time of S; its setup to the input clocks only decides at which of their edges.
+NET "hdmi_top/hdmi_pll/mux_sel" TIG;

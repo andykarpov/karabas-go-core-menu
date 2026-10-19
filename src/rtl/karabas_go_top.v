@@ -169,17 +169,24 @@ assign FDC_DIR			= 1'b1;
 assign MIDI_TX			= 1'b1;
 	
 // system clocks
-wire clk_sys, clk_8mhz, clk_16mhz, clk_12mhz, v_clk_int;
+wire clk_sys, clk_12mhz;
 wire locked, areset;
 
-pll pll (
-	.CLK_IN1				(CLK_50MHZ),
-	.CLK_OUT1			(clk_sys), // 40
-	.CLK_OUT2			(clk_8mhz),
-	.CLK_OUT3			(clk_16mhz),
-	.CLK_OUT4			(clk_12mhz),
-	.LOCKED				(locked)
+// VCO 50 * 18 / 2 = 450 MHz, phase 0: clk_sys 40.91 MHz (/11: the menu, its 800 x 600 video, the MCU link),
+// 12.16 MHz (/37: MIDI_CLK)
+wire [5:0] pll_clk;
+kg_pll #(
+	.DIVCLK_DIVIDE(2), .CLKFBOUT_MULT(18),
+	.CLKOUT0_DIVIDE(11), .CLKOUT1_DIVIDE(37),
+	.BUFG_MASK(6'b000010)
+) pll (
+	.clk_in				(CLK_50MHZ),
+	.rst					(1'b0),
+	.clk_out				(pll_clk),
+	.locked				(locked)
 );
+assign clk_12mhz = pll_clk[1];
+BUFG bufg_clk_sys(.I(pll_clk[0]), .O(clk_sys)); // in the top, as on the Mini / Mini G (the net of the ucf)
 assign areset = ~locked;
 
 // midi clk 12mhz out
@@ -188,25 +195,37 @@ ODDR2 u_midi_clk (.Q(MIDI_CLK), .C0(clk_12mhz), .C1(~clk_12mhz), .CE(1'b1), .D0(
 // ft control signals / mcu only access
 wire vdac2_sel = mcu_ft_vga_on;
 assign FT_SPI_CS_N 	= mcu_ft_spi_on ? mcu_ft_cs_n : 1'b1;
-assign FT_SPI_SCK 	= mcu_ft_spi_on ? mcu_ft_sck : 1'b1;
+assign FT_SPI_SCK 	= mcu_ft_spi_on ? MCU_SCK : 1'b1;
 assign FT_SPI_MOSI 	= mcu_ft_spi_on ? mcu_ft_mosi : 1'b1;
 assign FT_OE_N 		= ~vdac2_sel;
 
-// vga / ft mux
-assign VGA_R[7:0] 	= (vdac2_sel ? 8'bZZZZZZZZ : osd_r[7:0]);
-assign VGA_G[7:0] 	= (vdac2_sel ? 8'bZZZZZZZZ : osd_g[7:0]);
-assign VGA_B[7:0] 	= (vdac2_sel ? 8'bZZZZZZZZ : osd_b[7:0]);
-assign VGA_HS 			= (vdac2_sel ? 1'bZ : video_hs);
-assign VGA_VS 			= (vdac2_sel ? 1'bZ : video_vs);
-assign V_CLK 			= (vdac2_sel ? FT_CLK : clk_sys);
+// vga / ft mux. The video DAC takes the pixels with the rising V_CLK: in the mode of the menu it is the inverted
+// clk_sys, the middle of the pixel (the OSD changes its pixels with the rising clk_sys; overlay.vhd had its
+// counters and pixels on the falling clock and V_CLK = clk_sys). The pixels and syncs leave flip-flops of the
+// pads, a clock later both (the OSD output goes through the attribute logic: 16.7 ns to the pads).
+reg [7:0] vga_r_q = 8'd0, vga_g_q = 8'd0, vga_b_q = 8'd0;
+reg vga_hs_q = 1'b0, vga_vs_q = 1'b0;
+always @(posedge clk_sys) begin
+	vga_r_q <= osd_r;
+	vga_g_q <= osd_g;
+	vga_b_q <= osd_b;
+	vga_hs_q <= video_hs;
+	vga_vs_q <= video_vs;
+end
+assign VGA_R[7:0] 	= (vdac2_sel ? 8'bZZZZZZZZ : vga_r_q);
+assign VGA_G[7:0] 	= (vdac2_sel ? 8'bZZZZZZZZ : vga_g_q);
+assign VGA_B[7:0] 	= (vdac2_sel ? 8'bZZZZZZZZ : vga_b_q);
+assign VGA_HS 			= (vdac2_sel ? 1'bZ : vga_hs_q);
+assign VGA_VS 			= (vdac2_sel ? 1'bZ : vga_vs_q);
+assign V_CLK 			= (vdac2_sel ? FT_CLK : ~clk_sys);
 
 //---------- DAC ------------
-wire [15:0] audio_out_l, audio_out_r;
-PCM5102 PCM5102(
+// the menu has no sound on the Go
+kg_pcm5102 PCM5102(
 	.clk				(clk_sys),
 	.reset			(areset),
-	.left				(audio_out_l),
-	.right			(audio_out_r),
+	.left				(16'h0000),
+	.right			(16'h0000),
 	.din				(DAC_DAT),
 	.bck				(DAC_BCK),
 	.lrck				(DAC_LRCK)
@@ -215,10 +234,18 @@ assign DAC_MUTE = 1'b1; // soft mute, 0 = mute, 1 = unmute
 
 //---------- MCU ------------
 wire [15:0] osd_command;
-wire mcu_ft_spi_on, mcu_ft_vga_on, mcu_ft_sck, mcu_ft_mosi, mcu_ft_cs_n, mcu_ft_reset, mcu_busy;
+wire mcu_ft_spi_on, mcu_ft_vga_on, mcu_ft_mosi, mcu_ft_cs_n;
 wire [7:0] esp_uart_rx_data, esp_uart_tx_data;
-wire esp_uart_rx_wr, esp_uart_tx_wr;
-mcu mcu(
+wire esp_uart_rx_wr, esp_uart_rx_ack, esp_uart_tx_wr;
+wire mcu_burst_ready;
+assign MCU_SPI_IO[0] = mcu_burst_ready;
+assign MCU_SPI_IO[1] = 1'bz;
+
+kg_mcu #(
+	.BURST_MAX_MHZ(0), .CS_FILTER(3),
+	.ENABLE_RTC(0), .ENABLE_UART(0), .ENABLE_MATRIX(0), .ENABLE_DEBUG(0), .ENABLE_IMG(0), .ENABLE_FILE(0),
+	.ENABLE_FT(1), .ENABLE_SD2(0), .ENABLE_ESP(1)
+) mcu(
 	.CLK				(clk_sys),
 	.N_RESET			(~areset),
 
@@ -226,41 +253,60 @@ mcu mcu(
 	.MCU_MISO		(MCU_MISO),
 	.MCU_SCK			(MCU_SCK),
 	.MCU_SS			(MCU_CS_N),
-
 	.MCU_SPI_FT_SS	(MCU_SPI_FT_CS_N),
-	.MCU_SPI_SD2_SS(MCU_SPI_SD2_CS_N),
+	.MCU_SPI_SD2_SS(1'b1),
+	// burst transfers: firmware IO0 (GPIO14) = MCU_SPI_IO[1] (M11), IO1 (GPIO2) = MCU_SPI_IO[0] (N9)
+	.MCU_BURST_CS_N(MCU_SPI_IO[1]),
+	.MCU_BURST_READY(mcu_burst_ready),
 
-   .ESP_UART_TX_DATA   (esp_uart_tx_data),
-   .ESP_UART_TX_WR     (esp_uart_tx_wr),
-   .ESP_UART_RX_DATA   (esp_uart_rx_data),
-   .ESP_UART_RX_WR     (esp_uart_rx_wr),	
+	.RTC_A			(8'h00),
+	.RTC_DI			(8'h00),
+	.RTC_CS			(1'b0),
+	.RTC_WR_N		(1'b1),
+	.UART_TX_DATA	(8'h00),
+	.UART_TX_WR		(1'b0),
+	.UART_TX_MODE	(1'b0),
+	.UART_DLM		(8'h00),
+	.UART_DLL		(8'h00),
+	.UART_DLM_WR	(1'b0),
+	.UART_DLL_WR	(1'b0),
+	.MATRIX_CMD		(24'h000000),
+	.MATRIX_CMD_WR	(1'b0),
+	.DEBUG_ADDR		(16'h0000),
+	.DEBUG_DATA		(16'h0000),
+	.IMG_Q_WR		(1'b0),
+	.IMG_Q_DI		(24'h000000),
+	.SD2_MISO		(1'b1),
+
+	.ESP_UART_TX_DATA	(esp_uart_tx_data),
+	.ESP_UART_TX_WR	(esp_uart_tx_wr),
+	.ESP_UART_RX_DATA	(esp_uart_rx_data),
+	.ESP_UART_RX_WR	(esp_uart_rx_wr),
+	.ESP_UART_RX_ACK	(esp_uart_rx_ack),
 
 	.OSD_COMMAND	(osd_command),
 
 	.FT_SPI_ON		(mcu_ft_spi_on),
 	.FT_VGA_ON		(mcu_ft_vga_on),
-	.FT_SCK			(mcu_ft_sck),
 	.FT_MISO			(FT_SPI_MISO),
 	.FT_MOSI			(mcu_ft_mosi),
-	.FT_CS_N			(mcu_ft_cs_n),
-	.FT_RESET		(mcu_ft_reset),
-
-	.BUSY				(mcu_busy)
+	.FT_CS_N			(mcu_ft_cs_n)
 );
 
-//--------- ESP8266 SPI -------
+//--------- ESP8266 UART -------
 esp8266 esp8266(
-    .CLK                (clk_sys),
-    .RESET              (areset),
-    
-    .ESP_UART_RX_DATA   (esp_uart_rx_data),
-    .ESP_UART_RX_WR     (esp_uart_rx_wr),
-    .ESP_UART_TX_DATA   (esp_uart_tx_data),
-    .ESP_UART_TX_WR     (esp_uart_tx_wr),
+	.CLK					(clk_sys),
+	.RESET				(areset),
 
-    .UART_RX            (UART_RX),
-    .UART_TX            (UART_TX),
-    .UART_CTS           (UART_CTS)
+	.ESP_UART_RX_DATA	(esp_uart_rx_data),
+	.ESP_UART_RX_WR	(esp_uart_rx_wr),
+	.ESP_UART_RX_ACK	(esp_uart_rx_ack),
+	.ESP_UART_TX_DATA	(esp_uart_tx_data),
+	.ESP_UART_TX_WR	(esp_uart_tx_wr),
+
+	.UART_RX				(UART_RX),
+	.UART_TX				(UART_TX),
+	.UART_CTS			(UART_CTS)
 );
 
 //--------- VGA sync ---------
@@ -273,14 +319,15 @@ vga_sync vga_sync(
 );
 
 //--------- OSD --------------
+// the screen of the menu is the OSD (ALWAYS_ON); its place as overlay.vhd had it at 172 / 60 (sim/tb_eq_overlay.v)
 wire [7:0] osd_r, osd_g, osd_b;
-overlay #(.DEFAULT(1)) overlay(
-	.CLK				(clk_sys),
-	.RGB_I			(24'b0),
-	.RGB_O			({osd_r[7:0], osd_g[7:0], osd_b[7:0]}),
-	.HSYNC_I			(video_hs),
-	.VSYNC_I			(video_vs),
-	.OSD_COMMAND	(osd_command)
+kg_osd_overlay #(.H_OFFSET(171), .V_OFFSET(60), .H_DIV4_WIDTH(1200), .ALWAYS_ON(1)) overlay(
+	.clk				(clk_sys),
+	.rgb_i			(24'b0),
+	.rgb_o			({osd_r[7:0], osd_g[7:0], osd_b[7:0]}),
+	.hsync_i			(video_hs),
+	.vsync_i			(video_vs),
+	.osd_command	(osd_command)
 );
 
 endmodule

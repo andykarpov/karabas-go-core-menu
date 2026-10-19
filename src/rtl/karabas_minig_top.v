@@ -24,7 +24,7 @@
 -- EU, 2026
 ------------------------------------------------------------------------------------------------------------------*/
 
-// Warning! HW_ID3 macros defined in the Synthesize - XST process properties!
+// HW_ID3: defined in karabas_minig.xst
 
 module karabas_minig_top (
     //---------------------------
@@ -112,7 +112,7 @@ module karabas_minig_top (
     input wire            MCU_SCK,
     input wire            MCU_MOSI,
     output wire           MCU_MISO,
-    input wire [5:0]      MCU_IO,
+    inout wire [5:0]      MCU_IO,  // [0] burst cs_n, [1] burst ready, [2] sd2 cs_n, [3] ft cs_n
 
     //---------------------------
     output wire           MIDI_TX,
@@ -154,39 +154,54 @@ assign WA                 = 3'b000;
 assign ESP32_SPI_CS_N     = 1'b1;
 
 // system clocks
-wire clk_sys, clk_8mhz, clk_16mhz, clk_12mhz, v_clk_int;
+wire clk_sys, clk_sys_pll, clk_8mhz;
 wire locked, areset;
 
-pll pll (
-    .CLK_IN1             (CLK_50MHZ),
-    .CLK_OUT1            (clk_sys), // 40
-    .CLK_OUT2            (clk_8mhz),
-    .CLK_OUT3            (clk_16mhz),
-    .CLK_OUT4            (clk_12mhz),
-    .LOCKED              (locked)
+// VCO 50 * 18 / 2 = 450 MHz, phase 0: clk_sys 40.91 MHz (/11: the menu, its 800 x 600 video, the MCU link),
+// clk_8 8.18 MHz (/55: FT_CLK_OUT, the base of DCM_CLKGEN in hdmi_pll). The PLL output of clk_sys has no BUFG in
+// kg_pll: it drives the BUFG of clk_sys and the BUFGMUX of hdmi_pll.
+wire [5:0] pll_clk;
+kg_pll #(
+    .DIVCLK_DIVIDE(2), .CLKFBOUT_MULT(18),
+    .CLKOUT0_DIVIDE(11), .CLKOUT1_DIVIDE(55),
+    .BUFG_MASK(6'b000010)
+) pll (
+    .clk_in              (CLK_50MHZ),
+    .rst                 (1'b0),
+    .clk_out             (pll_clk),
+    .locked              (locked)
 );
+assign clk_sys_pll = pll_clk[0];
+assign clk_8mhz = pll_clk[1];
+BUFG bufg_clk_sys(.I(clk_sys_pll), .O(clk_sys));
 assign areset = ~locked;
 
 // ft clk 8mhz out
 ODDR2 u_ft_clk (.Q(FT_CLK_OUT), .C0(clk_8mhz), .C1(~clk_8mhz), .CE(1'b1), .D0(1'b1), .D1(1'b0), .R(1'b0), .S(1'b0));
 
+// MCU_SCK on a global buffer (as tsconf: on local routing the flip-flops of the SPI receiver had several ns of
+// clock skew). The SCK passed to the FT812 is taken before the BUFG, a BUFG drives clock pins only.
+wire mcu_sck_ibufg, mcu_sck;
+IBUFG ibufg_mcu_sck(.I(MCU_SCK), .O(mcu_sck_ibufg));
+BUFG bufg_mcu_sck(.I(mcu_sck_ibufg), .O(mcu_sck));
+
 // ft control signals / mcu only access
 wire vdac2_sel = mcu_ft_vga_on;
 assign FT_SPI_CS_N = mcu_ft_spi_on ? mcu_ft_cs_n : 1'b1;
-assign FT_SPI_SCK = mcu_ft_spi_on ? mcu_ft_sck : 1'b1;
+assign FT_SPI_SCK = mcu_ft_spi_on ? mcu_sck_ibufg : 1'b1;
 assign FT_SPI_MOSI = mcu_ft_spi_on ? mcu_ft_mosi : 1'b1;
 
-// ft clk input buf
-wire ft_clk_int;
-IBUFG(.I(FT_CLK), .O(ft_clk_int));
-
-// 28 / FT_CLK mux 
-BUFGMUX v_clk_mux(.I0(clk_sys), .I1(ft_clk_int), .O(v_clk_int), .S(vdac2_sel));
+// FT_CLK: the pixel clock of the FT812 (its video is taken on its falling edge, hdmi_pll measures it). It was a
+// BUFGMUX with clk_sys, which hdmi_pll measured in the mode of the menu too.
+wire ft_clk_ibufg, ft_clk_int;
+IBUFG ibufg_ft_clk(.I(FT_CLK), .O(ft_clk_ibufg));
+BUFG bufg_ft_clk(.I(ft_clk_ibufg), .O(ft_clk_int));
 
 // hdmi
-hdmi_top hdmi_top(
-    .clk                (v_clk_int),
+hdmi_top #(.SAMPLERATE(48000)) hdmi_top(
+    .clk                (ft_clk_int),
     .clk_ref            (clk_sys),
+    .clk_ref_pll        (clk_sys_pll),
     .clk_8              (clk_8mhz),
     .reset              (areset),
 
@@ -207,7 +222,9 @@ hdmi_top hdmi_top(
     .audio_r            (audio_mix_r),
 
     .tmds_p             (TMDS_P),
-    .tmds_n             (TMDS_N)
+    .tmds_n             (TMDS_N),
+
+    .freq               ()
 );
 
 // ------- PCM1808 ADC ---------
@@ -233,7 +250,7 @@ wire [15:0] audio_mix_l = adc_l[23:8];
 wire [15:0] audio_mix_r = adc_r[23:8];
 
 // ------- DAC --------------
-PCM5102 #(.DAC_CLK_DIV_BITS(2)) PCM5102(
+kg_pcm5102 #(.DIV_BITS(2)) PCM5102(
     .clk                (clk_sys),
     .reset              (areset),
     .left               (audio_mix_l),
@@ -245,50 +262,76 @@ PCM5102 #(.DAC_CLK_DIV_BITS(2)) PCM5102(
 
 //---------- MCU ------------
 wire [15:0] osd_command;
-wire mcu_ft_spi_on, mcu_ft_vga_on, mcu_ft_sck, mcu_ft_mosi, mcu_ft_cs_n, mcu_ft_reset, mcu_busy;
+wire mcu_ft_spi_on, mcu_ft_vga_on, mcu_ft_mosi, mcu_ft_cs_n;
 wire [7:0] esp_uart_rx_data, esp_uart_tx_data;
-wire esp_uart_rx_wr, esp_uart_tx_wr;
+wire esp_uart_rx_wr, esp_uart_rx_ack, esp_uart_tx_wr;
 wire dvi_only;
-mcu mcu(
+wire mcu_burst_ready;
+assign MCU_IO[1] = mcu_burst_ready;
+assign MCU_IO[0] = 1'bz;
+assign MCU_IO[5:2] = 4'bzzzz;
+
+kg_mcu #(
+    .BURST_MAX_MHZ(0), .CS_FILTER(3),
+    .ENABLE_RTC(0), .ENABLE_UART(0), .ENABLE_MATRIX(0), .ENABLE_DEBUG(0), .ENABLE_IMG(0), .ENABLE_FILE(0),
+    .ENABLE_FT(1), .ENABLE_SD2(0), .ENABLE_ESP(1)
+) mcu(
     .CLK                (clk_sys),
     .N_RESET            (~areset),
 
     .MCU_MOSI           (MCU_MOSI),
     .MCU_MISO           (MCU_MISO),
-    .MCU_SCK            (MCU_SCK),
+    .MCU_SCK            (mcu_sck),
     .MCU_SS             (MCU_CS_N),
-
     .MCU_SPI_FT_SS      (MCU_IO[3]),
-    .MCU_SPI_SD2_SS     (MCU_IO[2]),
+    .MCU_SPI_SD2_SS     (1'b1),
+    .MCU_BURST_CS_N     (MCU_IO[0]),
+    .MCU_BURST_READY    (mcu_burst_ready),
+
+    .RTC_A              (8'h00),
+    .RTC_DI             (8'h00),
+    .RTC_CS             (1'b0),
+    .RTC_WR_N           (1'b1),
+    .UART_TX_DATA       (8'h00),
+    .UART_TX_WR         (1'b0),
+    .UART_TX_MODE       (1'b0),
+    .UART_DLM           (8'h00),
+    .UART_DLL           (8'h00),
+    .UART_DLM_WR        (1'b0),
+    .UART_DLL_WR        (1'b0),
+    .MATRIX_CMD         (24'h000000),
+    .MATRIX_CMD_WR      (1'b0),
+    .DEBUG_ADDR         (16'h0000),
+    .DEBUG_DATA         (16'h0000),
+    .IMG_Q_WR           (1'b0),
+    .IMG_Q_DI           (24'h000000),
+    .SD2_MISO           (1'b1),
 
     .ESP_UART_TX_DATA   (esp_uart_tx_data),
     .ESP_UART_TX_WR     (esp_uart_tx_wr),
     .ESP_UART_RX_DATA   (esp_uart_rx_data),
     .ESP_UART_RX_WR     (esp_uart_rx_wr),
+    .ESP_UART_RX_ACK    (esp_uart_rx_ack),
 
     .OSD_COMMAND        (osd_command),
 
     .FT_SPI_ON          (mcu_ft_spi_on),
     .FT_VGA_ON          (mcu_ft_vga_on),
-    .FT_SCK             (mcu_ft_sck),
     .FT_MISO            (FT_SPI_MISO),
     .FT_MOSI            (mcu_ft_mosi),
     .FT_CS_N            (mcu_ft_cs_n),
-    .FT_RESET           (mcu_ft_reset),
-    
-    .HWID               (),
-    .DVI_ONLY           (dvi_only),
 
-    .BUSY               (mcu_busy)
+    .DVI_ONLY           (dvi_only)
 );
 
-//--------- ESP8266 SPI -------
+//--------- ESP8266 UART -------
 esp8266 esp8266(
     .CLK                (clk_sys),
     .RESET              (areset),
-    
+
     .ESP_UART_RX_DATA   (esp_uart_rx_data),
     .ESP_UART_RX_WR     (esp_uart_rx_wr),
+    .ESP_UART_RX_ACK    (esp_uart_rx_ack),
     .ESP_UART_TX_DATA   (esp_uart_tx_data),
     .ESP_UART_TX_WR     (esp_uart_tx_wr),
 
@@ -307,14 +350,15 @@ vga_sync vga_sync(
 );
 
 //--------- OSD --------------
+// the screen of the menu is the OSD (ALWAYS_ON); its place as overlay.vhd had it at 172 / 60 (sim/tb_eq_overlay.v)
 wire [7:0] osd_r, osd_g, osd_b;
-overlay #(.DEFAULT(1)) overlay(
-    .CLK                (clk_sys),
-    .RGB_I              (24'b0),
-    .RGB_O              ({osd_r[7:0], osd_g[7:0], osd_b[7:0]}),
-    .HSYNC_I            (video_hs),
-    .VSYNC_I            (video_vs),
-    .OSD_COMMAND        (osd_command)
+kg_osd_overlay #(.H_OFFSET(171), .V_OFFSET(60), .H_DIV4_WIDTH(1200), .ALWAYS_ON(1)) overlay(
+    .clk                (clk_sys),
+    .rgb_i              (24'b0),
+    .rgb_o              ({osd_r[7:0], osd_g[7:0], osd_b[7:0]}),
+    .hsync_i            (video_hs),
+    .vsync_i            (video_vs),
+    .osd_command        (osd_command)
 );
 
 endmodule
