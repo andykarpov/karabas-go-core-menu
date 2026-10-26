@@ -1,13 +1,14 @@
 {
     "id": "boot",
     "name": "Boot Menu",
-    "build": "26102617",
+    "build": "26102619",
     "bitstream": "karabas_go.bin",
     "visible": false,
     "type": "boot",
     "order": 1,
     "eeprom_bank": 0,
     "buttons": {"btn1": "bootsel", "btn2": "msc"},
+    "matrix": {"mode": "scroll", "text": "KARABAS GO", "repeat": 1, "then": "effect", "effect": "clock"},
     "roms": [],
     "osd": [
         {"type": "T", "bits": 1, "name": "Reset", "options": null, "default": 0, "hotkey": "Ctrl+Alt+Del"},
