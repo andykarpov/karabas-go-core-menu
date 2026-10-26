@@ -1,12 +1,13 @@
 {
     "id": "boot",
     "name": "Boot Menu",
-    "build": "26102001",
+    "build": "26102617",
     "bitstream": "karabas_minig.bin",
     "visible": false,
     "type": "boot",
     "order": 1,
     "eeprom_bank": 0,
+    "buttons": {"btn1": "bootsel", "btn2": "msc"},
     "roms": [],
     "osd": [
         {"type": "T", "bits": 1, "name": "Reset", "options": null, "default": 0, "hotkey": "Ctrl+Alt+Del"},
