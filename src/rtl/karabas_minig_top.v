@@ -54,8 +54,8 @@ module karabas_minig_top (
     //---------------------------
     output wire           SD_CS_N,
     output wire           SD_CLK,
-    inout wire            SD_DI,
-    inout wire            SD_DO,
+    output wire           SD_DI,
+    input wire            SD_DO,
     input wire            SD_DET_N,
 
     //---------------------------
@@ -137,8 +137,6 @@ assign MRD_N              = 1'b1;
 assign SDR_WE_N           = 1'b1;
 assign SDR_CAS_N          = 1'b1;
 assign SDR_RAS_N          = 1'b1;
-assign SD_CS_N            = 1'b1;
-assign SD_CLK             = 1'b1;
 assign WCS_N              = 1'b1;
 assign WRD_N              = 1'b1;
 assign WWR_N              = 1'b1;
@@ -189,6 +187,8 @@ BUFG bufg_mcu_sck(.I(mcu_sck_ibufg), .O(mcu_sck));
 wire vdac2_sel = mcu_ft_vga_on;
 assign FT_SPI_CS_N = mcu_ft_spi_on ? mcu_ft_cs_n : 1'b1;
 assign FT_SPI_SCK = mcu_ft_spi_on ? mcu_sck_ibufg : 1'b1;
+// the SD2 pass-through takes the IBUFG output too (a BUFG does not drive a pad)
+assign SD_CLK = mcu_sck_ibufg;
 assign FT_SPI_MOSI = mcu_ft_spi_on ? mcu_ft_mosi : 1'b1;
 
 // FT_CLK: the pixel clock of the FT812 (its video is taken on its falling edge, hdmi_pll measures it). It was a
@@ -274,7 +274,7 @@ assign MCU_IO[5:2] = 4'bzzzz;
 kg_mcu #(
     .BURST_MAX_MHZ(0), .CS_FILTER(3),
     .ENABLE_RTC(0), .ENABLE_UART(0), .ENABLE_MATRIX(0), .ENABLE_DEBUG(0), .ENABLE_IMG(0), .ENABLE_FILE(0),
-    .ENABLE_FT(1), .ENABLE_SD2(0), .ENABLE_ESP(1)
+    .ENABLE_FT(1), .ENABLE_SD2(1), .ENABLE_ESP(1)
 ) mcu(
     .CLK                (clk_sys),
     .N_RESET            (~areset),
@@ -284,7 +284,7 @@ kg_mcu #(
     .MCU_SCK            (mcu_sck),
     .MCU_SS             (MCU_CS_N),
     .MCU_SPI_FT_SS      (MCU_IO[3]),
-    .MCU_SPI_SD2_SS     (1'b1),
+    .MCU_SPI_SD2_SS     (MCU_IO[2]),
     .MCU_BURST_CS_N     (MCU_IO[0]),
     .MCU_BURST_READY    (mcu_burst_ready),
 
@@ -305,7 +305,10 @@ kg_mcu #(
     .DEBUG_DATA         (16'h0000),
     .IMG_Q_WR           (1'b0),
     .IMG_Q_DI           (24'h000000),
-    .SD2_MISO           (1'b1),
+    .SD2_SCK            (),
+    .SD2_MOSI           (SD_DI),
+    .SD2_MISO           (SD_DO),
+    .SD2_CS_N           (SD_CS_N),
 
     .ESP_UART_TX_DATA   (esp_uart_tx_data),
     .ESP_UART_TX_WR     (esp_uart_tx_wr),

@@ -31,12 +31,13 @@ JSON_mini = core_mini.json
 JSON_minig = core_minig.json
 
 # map / par options (as tsconf; the .xise projects of the menu had -global_opt speed), the cost table per board
-# The Mini has 2: with 1 the path from audio_en_s (HDMI / DVI, static) of hdmi_top to the shift registers of the 5x
-# clock of zhdmi missed by 0.09 ns in the mode of the menu (-coremode; 1 logic level, 3.2 ns of route, fanout 38);
-# 2, 3, 4, 5 met all constraints.
+# The table only moves the placement; when -coremode misses, try another (see CLAUDE.md). With the SD2 pass-through
+# (build 26102621) the Mini met all constraints with 1 (2 missed by 1.4 ns: hdmi_top ft_sel_s -> dc_bias of zhdmi),
+# the Mini G with 3 (1 and 2 missed by 0.7 ns: ft_fifo dout -> dc_bias). Before it the Mini had 2 (1 missed by
+# 0.09 ns: audio_en_s -> the 5x shift registers).
 MAP_T_go = 1
-MAP_T_mini = 2
-MAP_T_minig = 1
+MAP_T_mini = 1
+MAP_T_minig = 3
 MAP_OPT = -logic_opt off -ol high -xe n -xt 0 -register_duplication off -r 4 -global_opt off -mt 2 -detail -ir off -pr b -lc off -power off
 PAR_OPT = -ol high -xe n -mt 4
 
