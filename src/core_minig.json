@@ -8,7 +8,7 @@
     "order": 1,
     "eeprom_bank": 0,
     "buttons": {"btn1": "bootsel", "btn2": "msc"},
-    "matrix": {"mode": "scroll", "text": "KARABAS MINI G", "repeat": 1, "then": "effect", "effect": "clock"},
+    "matrix": {"mode": "scroll", "text": "KARABAS GO MINI", "repeat": 1, "then": "effect", "effect": "clock"},
     "roms": [],
     "osd": [
         {"type": "T", "bits": 1, "name": "Reset", "options": null, "default": 0, "hotkey": "Ctrl+Alt+Del"},
