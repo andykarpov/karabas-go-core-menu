@@ -1,13 +1,13 @@
 {
     "id": "boot",
     "name": "Boot Menu",
-    "build": "26102619",
+    "build": "26102621",
     "bitstream": "karabas_minig.bin",
     "visible": false,
     "type": "boot",
     "order": 1,
     "eeprom_bank": 0,
-    "buttons": {"btn1": "bootsel", "btn2": "msc"},
+    "buttons": {"btn1": "bootsel", "btn2": {"press": "msc", "hold": "msc2"}},
     "matrix": {"mode": "scroll", "text": "KARABAS GO MINI", "repeat": 1, "then": "effect", "effect": "clock"},
     "roms": [],
     "osd": [

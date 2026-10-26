@@ -55,8 +55,8 @@ module karabas_go_top (
 	//---------------------------
 	output wire 			SD_CS_N,
 	output wire 			SD_CLK,
-	inout wire 				SD_DI,
-	inout wire 				SD_DO,
+	output wire 			SD_DI,
+	input wire 				SD_DO,
 	input wire 				SD_DET_N,
 
 	//---------------------------
@@ -158,9 +158,7 @@ assign SDR_CAS_N 		= 1'b1;
 assign SDR_RAS_N 		= 1'b1;
 assign FDC_DRIVE 		= 2'b00;
 assign FDC_MOTOR 		= 1'b0;
-assign SD_CS_N			= 1'b1;
 assign FDC_SIDE_N		= 1'b1;
-assign SD_CLK			= 1'b1;
 assign FDC_WDATA		= 1'b1;
 assign FDC_WGATE		= 1'b1;
 assign MIDI_RESET_N	= 1'b1;
@@ -244,7 +242,7 @@ assign MCU_SPI_IO[1] = 1'bz;
 kg_mcu #(
 	.BURST_MAX_MHZ(0), .CS_FILTER(3),
 	.ENABLE_RTC(0), .ENABLE_UART(0), .ENABLE_MATRIX(0), .ENABLE_DEBUG(0), .ENABLE_IMG(0), .ENABLE_FILE(0),
-	.ENABLE_FT(1), .ENABLE_SD2(0), .ENABLE_ESP(1)
+	.ENABLE_FT(1), .ENABLE_SD2(1), .ENABLE_ESP(1)
 ) mcu(
 	.CLK				(clk_sys),
 	.N_RESET			(~areset),
@@ -254,7 +252,7 @@ kg_mcu #(
 	.MCU_SCK			(MCU_SCK),
 	.MCU_SS			(MCU_CS_N),
 	.MCU_SPI_FT_SS	(MCU_SPI_FT_CS_N),
-	.MCU_SPI_SD2_SS(1'b1),
+	.MCU_SPI_SD2_SS(MCU_SPI_SD2_CS_N),
 	// burst transfers: firmware IO0 (GPIO14) = MCU_SPI_IO[1] (M11), IO1 (GPIO2) = MCU_SPI_IO[0] (N9)
 	.MCU_BURST_CS_N(MCU_SPI_IO[1]),
 	.MCU_BURST_READY(mcu_burst_ready),
@@ -276,7 +274,10 @@ kg_mcu #(
 	.DEBUG_DATA		(16'h0000),
 	.IMG_Q_WR		(1'b0),
 	.IMG_Q_DI		(24'h000000),
-	.SD2_MISO		(1'b1),
+	.SD2_SCK		(SD_CLK),
+	.SD2_MOSI		(SD_DI),
+	.SD2_MISO		(SD_DO),
+	.SD2_CS_N		(SD_CS_N),
 
 	.ESP_UART_TX_DATA	(esp_uart_tx_data),
 	.ESP_UART_TX_WR	(esp_uart_tx_wr),
