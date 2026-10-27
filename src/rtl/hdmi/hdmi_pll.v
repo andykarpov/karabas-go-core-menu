@@ -47,6 +47,11 @@ begin
 	if (~vdac2_sel && prev_vdac2_sel != vdac2_sel) begin
 		hdmi_reset <= 1'b1;
 	end
+	// the 5x DCM runs on clk_ref in the mode of the menu: every FT mode is programmed as a change, also at the
+	// frequency of the FT mode before (the G of the firmware's text OSD). Without it nothing reset the 5x DCM,
+	// which kept the 40.9 MHz of the menu: no signal, unless a part measurement of FT_CLK, right after the
+	// FT812 started, made a change by chance
+	if (~vdac2_sel) prev_hdmi_freq <= 8'd0;
 	// reset to reconfigure dcm. Not on the first clock of the FT mode: freq_counter takes ft_sel a clock
 	// later and still gives the 40 of the menu, so a mode of another frequency (24 MHz, the 640x480 of the
 	// firmware) made two resets in a row, and the second loaded prog_data again while its first bit was
