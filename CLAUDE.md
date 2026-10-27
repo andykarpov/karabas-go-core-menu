@@ -13,7 +13,7 @@ This core is the loader of every other core: a broken build leaves the board wit
 ## Build
 
 - `cd src && make` builds the three boards (`make go`, `mini`, `minig` one of them; `make minig-xst`, `-impl`, `-core` one step; `make minig-report` the utilization and timing of the last build, `make minig-coremode` the second timing run of the Mini / Mini G, see Timing). It runs the ISE command-line flow and sources `/opt/Xilinx/14.7/ISE_DS/settings64.sh` (`ISE_SETTINGS=` to change it). The boards share `xst/` and `_ngo/` in `src/`, so they are built one after the other; a board takes a few minutes.
-- Inputs per board: `karabas_<board>.prj` (the source list, the shared modules as `"../modules/rtl/..."`), `.xst`, `.ucf`, `.ut`. There is no ISE GUI project (`.xise`); the Makefile has the map / par options (those of tsconf). The map cost table is per board, `MAP_T_<board>` (the Mini 2, the others 1): when a build misses a constraint by a placement (a path without logic and a long route), try another (2...5) before changing the design.
+- Inputs per board: `karabas_<board>.prj` (the source list, the shared modules as `"../modules/rtl/..."`), `.xst`, `.ucf`, `.ut`. There is no ISE GUI project (`.xise`); the Makefile has the map / par options (those of tsconf). The map cost table is per board, `MAP_T_<board>` (the Go and the Mini 1, the Mini G 2): when a build misses a constraint by a placement (a path without logic and a long route), try another (2...5) before changing the design.
 - `core` packs `karabas_<board>.bin` with `core.json` (Go), `core_mini.json`, `core_minig.json` into `boot.kg1` / `kg2` / `kg3` with `make_core.py`. The `.bin` and `.kg*` files are committed as the release; `build` of the json is `date +%y%m%d%H` of the release build.
 - The `osd` items of the json are the soft switch registers (Reset, Global Reset).
 
@@ -30,7 +30,7 @@ This core is the loader of every other core: a broken build leaves the board wit
 
 - `src/sim/run_eq_sim.sh` (ghdl, iverilog): `tb_eq_overlay`, `kg_osd_overlay` with the parameters of the tops against the old `overlay.vhd` (`sim/ref`, a ghdl `--synth` netlist) over the frames of `vga_sync`: always on, overlay, popup, flash. The last two clocks of each cell and the popup edges are counted, not compared (the old overlay ran on the falling edge).
 - `src/sim/run_mcu_sim.sh` (ISim): `tb_mcu_esp`, `kg_mcu` and `esp8266.vhd` as in the tops against the old `mcu.vhd` / `esp8266.vhd` (`sim/ref`): the control commands, the ESP uart both ways (bit time, a full reply queue), CMD_CAPS.
-- `src/sim/run_hdmi_sim.sh` (ISim): `tb_hdmi_top`, the menu video at 40.9 MHz and the FT812 at 64 / 40 MHz through `hdmi_pll` and the fifo, every pixel where it enters `hdmi_tx`, the audio samples.
+- `src/sim/run_hdmi_sim.sh` (ISim): `tb_hdmi_top`, the menu video at 40.9 MHz and the FT812 at 64 / 40 / 24.5 MHz through `hdmi_pll` (one DCM_CLKGEN programming at a time) and the fifo, every pixel where it enters `hdmi_tx`, the audio samples.
 - Each prints `<tb>: 0 errors`. The tests of the shared modules are in `modules/sim` (`run_all.sh`).
 
 ## Layout
