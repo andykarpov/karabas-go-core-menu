@@ -30,7 +30,7 @@ This core is the loader of every other core: a broken build leaves the board wit
 
 - `src/sim/run_eq_sim.sh` (ghdl, iverilog): `tb_eq_overlay`, `kg_osd_overlay` with the parameters of the tops against the old `overlay.vhd` (`sim/ref`, a ghdl `--synth` netlist) over the frames of `vga_sync`: always on, overlay, popup, flash. The last two clocks of each cell and the popup edges are counted, not compared (the old overlay ran on the falling edge).
 - `src/sim/run_mcu_sim.sh` (ISim): `tb_mcu_esp`, `kg_mcu` and `esp8266.vhd` as in the tops against the old `mcu.vhd` / `esp8266.vhd` (`sim/ref`): the control commands, the ESP uart both ways (bit time, a full reply queue), CMD_CAPS.
-- `src/sim/run_hdmi_sim.sh` (ISim): `tb_hdmi_top`, the menu video at 40.9 MHz and the FT812 at 64 / 40 / 24.5 MHz through `hdmi_pll` (one DCM_CLKGEN programming at a time) and the fifo, every pixel where it enters `hdmi_tx`, the audio samples.
+- `src/sim/run_hdmi_sim.sh` (ISim): `tb_hdmi_top`, the menu video at 40.9 MHz and the FT812 at 64 / 40 / 24.5 MHz and 24.5 MHz again after the menu (the G of the firmware's text OSD) through `hdmi_pll` (one DCM_CLKGEN programming at a time, a programming on every FT mode) and the fifo, every pixel where it enters `hdmi_tx`, the audio samples.
 - Each prints `<tb>: 0 errors`. The tests of the shared modules are in `modules/sim` (`run_all.sh`).
 
 ## Layout

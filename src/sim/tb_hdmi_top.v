@@ -13,6 +13,7 @@
 // - the audio samples: audio_l counts the clocks of clk_ref, audio_r is its complement, so a
 //   sample must be r = ~l (both halves of one sample) and the step from the sample before must
 //   be CLKRATE / SAMPLERATE clocks; the number of samples per phase gives the rate.
+// - the FT812 back at the frequency of its last mode (after the menu) is programmed again;
 // - one DCM_CLKGEN programming at a time: no hdmi_reset while a sequence is shifted out (a second one
 //   sent its first bit twice: LoadM instead of LoadD).
 // Ends with "tb_hdmi_top: N errors".
@@ -221,6 +222,16 @@ initial begin
 	#3000000;
 	@(negedge clk_ref) ft_sel = 1'b1;
 	phase("FT 24.5 MHz", 8'd24, 3500, 1500);
+
+	@(negedge clk_ref) ft_sel = 1'b0;
+	phase("menu 40.9 MHz", 8'd40, 1000, 1000);
+
+	// the FT812 picture again at the frequency it had (the menu, then G in the text OSD of the firmware):
+	// the frequency does not change, and DCM_CLKGEN must still be programmed, or the 5x DCM keeps the 40.9 MHz
+	// of the menu with no reset
+	#3000000;
+	@(negedge clk_ref) ft_sel = 1'b1;
+	phase("FT 24.5 again", 8'd24, 3500, 1500);
 
 	@(negedge clk_ref) ft_sel = 1'b0;
 	phase("menu 40.9 MHz", 8'd40, 1000, 1000);
