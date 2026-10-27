@@ -1,8 +1,9 @@
 `timescale 1ns / 1ps
 
 // hdmi_top (rtl/hdmi/hdmi_top.v), ISim with the unisim models of the DCMs and clock buffers:
-// the video of the menu (40.9 MHz), then of the FT812 at 65.5 and at 40.9 MHz (8.18 MHz x 8 and x 5, modes 7 and 3
-// of the firmware; hdmi_pll measures the clock and programs DCM_CLKGEN), checked where it enters hdmi_tx (host_vga_*).
+// the video of the menu (40.9 MHz), then of the FT812 at 65.5, 40.9 and 24.5 MHz (8.18 MHz x 8, x 5 and x 3; the
+// last two are the modes 1 and 0 of the firmware; hdmi_pll measures the clock and programs DCM_CLKGEN), checked
+// where it enters hdmi_tx (host_vga_*).
 // The FT812 changes its clock before ft_sel goes up (the firmware sets its mode, then turns its video on): the
 // frequency is measured then, and must be taken when ft_sel goes up; the second FT mode has the frequency of the
 // menu, which the old code did not program either (it measured clk_ref in the mode of the menu).
@@ -12,6 +13,8 @@
 // - the audio samples: audio_l counts the clocks of clk_ref, audio_r is its complement, so a
 //   sample must be r = ~l (both halves of one sample) and the step from the sample before must
 //   be CLKRATE / SAMPLERATE clocks; the number of samples per phase gives the rate.
+// - one DCM_CLKGEN programming at a time: no hdmi_reset while a sequence is shifted out (a second one
+//   sent its first bit twice: LoadM instead of LoadD).
 // Ends with "tb_hdmi_top: N errors".
 
 module tb_hdmi_top;
@@ -144,6 +147,11 @@ always @(posedge pclk) begin
 	end
 end
 
+always @(posedge clk_ref) begin
+	if (dut.hdmi_pll.hdmi_reset && |dut.hdmi_pll.prog_en)
+		fail("hdmi_reset during a DCM_CLKGEN programming", dut.hdmi_pll.prog_en, 0);
+end
+
 integer samples = 0;
 reg have_prev = 1'b0;
 reg [15:0] prev_l = 16'd0;
@@ -205,6 +213,14 @@ initial begin
 	#3000000;
 	@(negedge clk_ref) ft_sel = 1'b1;
 	phase("FT 40.9 MHz", 8'd40, 3500, 1500);
+
+	@(negedge clk_ref) ft_sel = 1'b0;
+	phase("menu 40.9 MHz", 8'd40, 1000, 1000);
+
+	ft_half = 20.370; // 24.55 MHz (8.18 x 3)
+	#3000000;
+	@(negedge clk_ref) ft_sel = 1'b1;
+	phase("FT 24.5 MHz", 8'd24, 3500, 1500);
 
 	@(negedge clk_ref) ft_sel = 1'b0;
 	phase("menu 40.9 MHz", 8'd40, 1000, 1000);

@@ -38,7 +38,7 @@ assign freq = prev_hdmi_freq;
 
 // detect freq change
 reg hdmi_reset;
-reg [7:0] prev_hdmi_freq;
+reg [7:0] prev_hdmi_freq = 8'd0; // 0 as XST starts it: in simulation an X hid the first programming
 reg prev_vdac2_sel;
 always @(posedge clk_ref)
 begin
@@ -47,8 +47,12 @@ begin
 	if (~vdac2_sel && prev_vdac2_sel != vdac2_sel) begin
 		hdmi_reset <= 1'b1;
 	end
-	// reset to reconfigure dcm
-	else if (vdac2_sel && prog_done) begin
+	// reset to reconfigure dcm. Not on the first clock of the FT mode: freq_counter takes ft_sel a clock
+	// later and still gives the 40 of the menu, so a mode of another frequency (24 MHz, the 640x480 of the
+	// firmware) made two resets in a row, and the second loaded prog_data again while its first bit was
+	// already out: DCM_CLKGEN got 1, 1 (LoadM) instead of 1, 0 (LoadD), and the HDMI had no signal on
+	// some starts. Not while a sequence is shifted out either.
+	else if (vdac2_sel && prev_vdac2_sel && prog_done && ~|prog_en) begin
 		if (prev_hdmi_freq != hdmi_freq) hdmi_reset <= 1'b1;
 		prev_hdmi_freq <= hdmi_freq;
 	end
