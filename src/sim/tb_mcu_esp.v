@@ -9,7 +9,8 @@
 //   clocks a bit for 40 MHz, 117.9 kbaud at 40.9 MHz; now 355, measured on a 00 byte);
 // - bytes of the ESP on UART_RX: the CMD_ESP_UART words to the MCU, in order; then 700 bytes while the MCU sends no
 //   frames (the reply queue holds 512), then read: all of them in order;
-// - CMD_CAPS: answered now (bursts, as kg_mcu does in every core), not before.
+// - CMD_CAPS: answered now (bursts, as kg_mcu does in every core, and bit 4 MIDI IN), not before;
+// - CMD_MIDI bytes of a USB keyboard: on MIDI_TX at 31250 baud through kg_midi_tx, as the tops have it.
 // Errors count the new link only; what the old one did with the bytes of the ESP is printed ("old link:"): it gave
 // each byte one later (the byte read before from its fifo) and lost what did not fit in its reply queue.
 // Ends with "tb_mcu_esp: N errors".
@@ -45,7 +46,7 @@ wire esp_rx_wr, esp_rx_ack, esp_tx_wr;
 kg_mcu #(
 	.BURST_MAX_MHZ(0), .CS_FILTER(3),
 	.ENABLE_RTC(0), .ENABLE_UART(0), .ENABLE_MATRIX(0), .ENABLE_DEBUG(0), .ENABLE_IMG(0), .ENABLE_FILE(0),
-	.ENABLE_FT(1), .ENABLE_SD2(0), .ENABLE_ESP(1)
+	.ENABLE_FT(1), .ENABLE_SD2(0), .ENABLE_ESP(1), .ENABLE_MIDI(1)
 ) new_mcu(
 	.CLK(clk), .N_RESET(n_reset),
 	.MCU_MOSI(mosi), .MCU_MISO(miso_new), .MCU_SCK(sck), .MCU_SS(cs_n),
@@ -58,8 +59,31 @@ kg_mcu #(
 	.ESP_UART_RX_DATA(esp_rx_data), .ESP_UART_RX_WR(esp_rx_wr), .ESP_UART_RX_ACK(esp_rx_ack),
 	.OSD_COMMAND(osd_new), .FT_SPI_ON(ft_spi_new), .FT_VGA_ON(ft_vga_new), .FT_RESET(ft_reset_new),
 	.FT_MISO(1'b1), .FT_MOSI(), .FT_CS_N(), .FT_SCK(),
-	.HWID(hwid_new), .DVI_ONLY(dvi_new), .BUSY(busy_new)
+	.HWID(hwid_new), .DVI_ONLY(dvi_new), .BUSY(busy_new),
+	.MIDI_DATA(midi_data), .MIDI_WR(midi_wr), .MIDI_LOST()
 );
+
+// the MIDI thru of the tops, and a 31250 baud receiver on its line (the middle of each bit, in clocks)
+wire [7:0] midi_data;
+wire midi_wr, midi_tx;
+kg_midi_tx #(.CLK_HZ(40910000)) midi_thru(.clk(clk), .data(midi_data), .wr(midi_wr), .overflow(), .tx(midi_tx));
+localparam MIDI_DIV = (40910000 + 15625) / 31250;
+reg [7:0] midi_got [0:7];
+reg [7:0] midi_b;
+integer midi_n = 0, midi_i;
+initial forever begin
+	@(negedge midi_tx);
+	repeat (MIDI_DIV / 2) @(posedge clk);
+	if (midi_tx !== 1'b0) fail("MIDI start bit");
+	for (midi_i = 0; midi_i < 8; midi_i = midi_i + 1) begin
+		repeat (MIDI_DIV) @(posedge clk);
+		midi_b[midi_i] = midi_tx;
+	end
+	repeat (MIDI_DIV) @(posedge clk);
+	if (midi_tx !== 1'b1) fail("MIDI stop bit");
+	if (midi_n < 8) midi_got[midi_n] = midi_b;
+	midi_n = midi_n + 1;
+end
 
 esp8266 new_esp(
 	.CLK(clk), .RESET(~n_reset),
@@ -278,7 +302,14 @@ initial begin
 	// ---- CAPS ----
 	frame(8'hF7, 8'h00, 8'h01);
 	for (i = 0; i < 4; i = i + 1) frame(8'hFF, 8'h00, 8'h00);
-	if (qn[qn_n - 1] !== 24'hF7_03_00) fail("CMD_CAPS not answered");
+	if (qn[qn_n - 1] !== 24'hF7_13_00) fail("CMD_CAPS not answered");
+
+	// ---- MIDI thru ----
+	frame(8'h16, 8'h00, 8'h90);
+	frame(8'h16, 8'h01, 8'h3C);
+	frame(8'h16, 8'h02, 8'h64);
+	wait (midi_n == 3);
+	if (midi_got[0] !== 8'h90 || midi_got[1] !== 8'h3C || midi_got[2] !== 8'h64) fail("MIDI_TX bytes");
 
 	$display("tb_mcu_esp: %0d errors", errors);
 	$finish;

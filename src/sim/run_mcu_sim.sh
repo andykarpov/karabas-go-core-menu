@@ -1,7 +1,7 @@
 #!/bin/bash
 # The MCU link of the tops against the old one (ISim, ISE 14.7):
 #   tb_mcu_esp: kg_mcu with the parameters of the tops and esp8266.vhd against mcu.vhd / esp8266.vhd of the core
-#               (sim/ref), the commands of the menu, the ESP uart both ways, CMD_CAPS
+#               (sim/ref), the commands of the menu, the ESP uart both ways, CMD_CAPS, the MIDI thru
 # Usage: src/sim/run_mcu_sim.sh [path to ISE_DS/settings64.sh]
 # Prints "tb_mcu_esp: 0 errors"; the script fails on any other count.
 
@@ -20,7 +20,7 @@ cd "$OUT"
 {
 	for f in mem/kg_fifo.v mem/kg_sdpram.v mcu/kg_spi_slave.v mcu/kg_burst_rx.v mcu/kg_mcu_link.v mcu/kg_mcu_ctl.v \
 		mcu/kg_mcu_hid.v mcu/kg_mcu_loader.v mcu/kg_mcu_rtc.v mcu/kg_mcu_uart.v mcu/kg_mcu_img.v mcu/kg_mcu_debug.v \
-		mcu/kg_mcu_esp.v mcu/kg_mcu.v; do
+		mcu/kg_mcu_esp.v mcu/kg_mcu_midi.v mcu/kg_mcu.v audio/kg_midi_tx.v; do
 		echo "verilog work \"$M/$f\" -i \"$M/mcu\""
 	done
 	echo "vhdl work \"$RTL/uart/uart_rx.vhd\""

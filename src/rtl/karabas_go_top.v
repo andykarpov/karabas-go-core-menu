@@ -164,7 +164,9 @@ assign FDC_WGATE		= 1'b1;
 assign MIDI_RESET_N	= 1'b1;
 assign FDC_STEP		= 1'b1;
 assign FDC_DIR			= 1'b1;
-assign MIDI_TX			= 1'b1;
+// MIDI_TX: the thru of a USB MIDI keyboard (kg_mcu ENABLE_MIDI) to the SAM2695, below
+wire [7:0] midi_data;
+wire midi_wr;
 	
 // system clocks
 wire clk_sys, clk_12mhz;
@@ -242,7 +244,7 @@ assign MCU_SPI_IO[1] = 1'bz;
 kg_mcu #(
 	.BURST_MAX_MHZ(0), .CS_FILTER(3),
 	.ENABLE_RTC(0), .ENABLE_UART(0), .ENABLE_MATRIX(0), .ENABLE_DEBUG(0), .ENABLE_IMG(0), .ENABLE_FILE(0),
-	.ENABLE_FT(1), .ENABLE_SD2(1), .ENABLE_ESP(1)
+	.ENABLE_FT(1), .ENABLE_SD2(1), .ENABLE_ESP(1), .ENABLE_MIDI(1)
 ) mcu(
 	.CLK				(clk_sys),
 	.N_RESET			(~areset),
@@ -291,7 +293,18 @@ kg_mcu #(
 	.FT_VGA_ON		(mcu_ft_vga_on),
 	.FT_MISO			(FT_SPI_MISO),
 	.FT_MOSI			(mcu_ft_mosi),
-	.FT_CS_N			(mcu_ft_cs_n)
+	.FT_CS_N			(mcu_ft_cs_n),
+
+	.MIDI_DATA		(midi_data),
+	.MIDI_WR			(midi_wr),
+	.MIDI_LOST		()
+);
+
+//--------- MIDI thru -------
+// the bytes of a USB MIDI keyboard (CMD_MIDI) to the SAM2695 at 31250 baud: the keyboard plays
+// the synth of the board in the menu (karabas-go-firmware docs/usb_midi_plan.md)
+kg_midi_tx #(.CLK_HZ(40910000)) midi_thru(
+	.clk(clk_sys), .data(midi_data), .wr(midi_wr), .overflow(), .tx(MIDI_TX)
 );
 
 //--------- ESP8266 UART -------
