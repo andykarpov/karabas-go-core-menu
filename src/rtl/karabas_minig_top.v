@@ -132,8 +132,6 @@ assign FLASH_DI           = 1'b1;
 assign FLASH_SCK          = 1'b0;
 assign FLASH_WP_N         = 1'b1;
 assign FLASH_HOLD_N       = 1'b1;
-assign MWR_N              = 1'b1;
-assign MRD_N              = 1'b1;
 assign SDR_WE_N           = 1'b1;
 assign SDR_CAS_N          = 1'b1;
 assign SDR_RAS_N          = 1'b1;
@@ -149,7 +147,6 @@ assign SDR_A              = 13'b0;
 assign SDR_CLK            = 1'b1;
 assign SDR_BA             = 2'b11;
 assign SDR_DQM            = 2'b11;
-assign MA                 = 21'b0;
 assign WA                 = 3'b000;
 assign ESP32_SPI_CS_N     = 1'b1;
 
@@ -175,6 +172,21 @@ assign clk_sys_pll = pll_clk[0];
 assign clk_8mhz = pll_clk[1];
 BUFG bufg_clk_sys(.I(clk_sys_pll), .O(clk_sys));
 assign areset = ~locked;
+
+// the SRAM is filled with zeros once after the PLL lock (0.2 s), so the next core starts with clean memory
+wire [15:0] sram_data;
+wire sram_data_oe;
+sram_clear sram_clear (
+    .clk                (clk_sys),
+    .reset              (areset),
+    .addr               (MA),
+    .data               (sram_data),
+    .data_oe            (sram_data_oe),
+    .we_n               (MWR_N),
+    .rd_n               (MRD_N),
+    .done               ()
+);
+assign MD = sram_data_oe ? sram_data : 16'bz;
 
 // ft clk 8mhz out
 ODDR2 u_ft_clk (.Q(FT_CLK_OUT), .C0(clk_8mhz), .C1(~clk_8mhz), .CE(1'b1), .D0(1'b1), .D1(1'b0), .R(1'b0), .S(1'b0));
