@@ -2,16 +2,19 @@
     "id": "boot",
     "name": "Boot Menu",
     "build": "26110116",
-    "bitstream": "karabas_go.bin",
     "visible": false,
     "type": "boot",
     "order": 1,
     "eeprom_bank": 0,
     "buttons": {"btn1": "bootsel", "btn2": {"press": "msc", "hold": "msc2"}},
-    "matrix": {"mode": "scroll", "text": "KARABAS GO", "repeat": 1, "then": "effect", "effect": "clock"},
     "roms": [],
+    "boards": {
+        "go": {"bitstream": "karabas_go.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO", "repeat": 1, "then": "effect", "effect": "clock"}},
+        "mini": {"bitstream": "karabas_mini.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO MINI", "repeat": 1, "then": "effect", "effect": "clock"}},
+        "minig": {"bitstream": "karabas_minig.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO MINI", "repeat": 1, "then": "effect", "effect": "clock"}}
+    },
     "osd": [
-        {"type": "T", "bits": 1, "name": "Reset", "options": null, "default": 0, "hotkey": "Ctrl+Alt+Del"},
-        {"type": "T", "bits": 1, "name": "Global Reset", "options": null, "default": 0, "hotkey": "Ctrl+Alt+Bkspace"}
+    {"type": "T", "bits": 1, "name": "Reset", "options": null, "default": 0, "hotkey": "Ctrl+Alt+Del"},
+    {"type": "T", "bits": 1, "name": "Global Reset", "options": null, "default": 0, "hotkey": "Ctrl+Alt+Bkspace"}
     ]
 }
