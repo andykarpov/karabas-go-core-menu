@@ -11,7 +11,7 @@
     "boards": {
         "go": {"bitstream": "karabas_go.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO", "repeat": 1, "then": "effect", "effect": "clock"}},
         "mini": {"bitstream": "karabas_mini.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO MINI", "repeat": 1, "then": "effect", "effect": "clock"}},
-        "minig": {"bitstream": "karabas_minig.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO MINI", "repeat": 1, "then": "effect", "effect": "clock"}}
+        "minig": {"bitstream": "karabas_minig.bin", "link": 2, "matrix": {"mode": "scroll", "text": "KARABAS GO MINI", "repeat": 1, "then": "effect", "effect": "clock"}}
     },
     "osd": [
     {"type": "T", "bits": 1, "name": "Reset", "options": null, "default": 0, "hotkey": "Ctrl+Alt+Del"},
