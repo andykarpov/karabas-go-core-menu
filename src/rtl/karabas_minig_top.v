@@ -139,7 +139,7 @@ assign WCS_N              = 1'b1;
 assign WRD_N              = 1'b1;
 assign WWR_N              = 1'b1;
 assign WRESET_N           = 1'b1;
-// MIDI_TX: the thru of a USB MIDI keyboard (kg_mcu ENABLE_MIDI) to the SAM2695, below
+// MIDI_TX: the thru of a USB MIDI keyboard (PORT 2 of kg_mcu2) to the SAM2695, below
 wire [7:0] midi_data;
 wire midi_wr;
 assign TAPE_OUT           = 1'b0;
@@ -211,6 +211,10 @@ wire ft_clk_ibufg, ft_clk_int;
 IBUFG ibufg_ft_clk(.I(FT_CLK), .O(ft_clk_ibufg));
 BUFG bufg_ft_clk(.I(ft_clk_ibufg), .O(ft_clk_int));
 
+// the video of the menu: the bitmap OSD over a black frame (below)
+wire [7:0] osd_r, osd_g, osd_b;
+wire video_hs, video_vs, video_de;
+
 // hdmi
 hdmi_top #(.SAMPLERATE(48000)) hdmi_top(
     .clk                (ft_clk_int),
@@ -275,78 +279,72 @@ kg_pcm5102 #(.DIV_BITS(2)) PCM5102(
 );
 
 //---------- MCU ------------
-wire [15:0] osd_command;
+// MCU link v2 (karabas-go-firmware docs/link_v2.md, kg_mcu2): INT on IO1, the bitmap OSD, PORT 1
+// the ESP8266, PORT 2 MIDI IN (caps bit 9), the FT812 and the SD2 slot passed through
 wire mcu_ft_spi_on, mcu_ft_vga_on, mcu_ft_mosi, mcu_ft_cs_n;
 wire [7:0] esp_uart_rx_data, esp_uart_tx_data;
 wire esp_uart_rx_wr, esp_uart_rx_ack, esp_uart_tx_wr;
 wire dvi_only;
-wire mcu_burst_ready;
-assign MCU_IO[1] = mcu_burst_ready;
+wire mcu_int;
+assign MCU_IO[1] = mcu_int;
 assign MCU_IO[0] = 1'bz;
 assign MCU_IO[5:2] = 4'bzzzz;
 
-kg_mcu #(
-    .BURST_MAX_MHZ(0), .CS_FILTER(3),
-    .ENABLE_RTC(0), .ENABLE_UART(0), .ENABLE_MATRIX(0), .ENABLE_DEBUG(0), .ENABLE_IMG(0), .ENABLE_FILE(0),
-    .ENABLE_FT(1), .ENABLE_SD2(1), .ENABLE_ESP(1), .ENABLE_MIDI(1)
+wire osd_wr, osd_en, osd_zoom;
+wire [11:0] osd_waddr;
+wire [7:0] osd_wdata;
+wire [23:0] osd_fg, osd_bg;
+wire [1:0] osd_alpha, osd_place;
+wire [4:0] osd_px, osd_ph;
+wire [3:0] osd_py;
+wire [5:0] osd_pw;
+wire [31:0] port_out_data;
+wire [3:0] port_out_wr, port_in_full;
+
+// the ESP: its byte is held until the ack; taken when port 1 has room
+wire esp_in_wr = esp_uart_rx_wr && !port_in_full[1];
+assign esp_uart_rx_ack = esp_in_wr;
+assign esp_uart_tx_data = port_out_data[15:8];
+assign esp_uart_tx_wr = port_out_wr[1];
+assign midi_data = port_out_data[23:16];
+assign midi_wr = port_out_wr[2];
+
+kg_mcu2 #(
+    .CAPS(16'h0200), .SW_N(2), .CS_FILTER(3),
+    .ENABLE_OSD(1), .ENABLE_PORTS(4'b0110), .PORT_IN_AW(6),
+    .ENABLE_FT(1), .ENABLE_SD2(1)
 ) mcu(
-    .CLK                (clk_sys),
-    .N_RESET            (~areset),
+    .CLK(clk_sys), .N_RESET(~areset),
+    .MCU_SCK(mcu_sck), .MCU_MOSI(MCU_MOSI), .MCU_MISO(MCU_MISO), .MCU_SS(MCU_CS_N), .MCU_INT(mcu_int),
+    .MCU_SPI_FT_SS(MCU_IO[3]), .MCU_SPI_SD2_SS(MCU_IO[2]),
 
-    .MCU_MOSI           (MCU_MOSI),
-    .MCU_MISO           (MCU_MISO),
-    .MCU_SCK            (mcu_sck),
-    .MCU_SS             (MCU_CS_N),
-    .MCU_SPI_FT_SS      (MCU_IO[3]),
-    .MCU_SPI_SD2_SS     (MCU_IO[2]),
-    .MCU_BURST_CS_N     (MCU_IO[0]),
-    .MCU_BURST_READY    (mcu_burst_ready),
+    .SW(), .SW_WR(), .SW_INDEX(), .SW_VALUE(), .HW_ID(), .DVI_ONLY(dvi_only), .CORE_BUILD(), .FW_BUILD(),
+    .BUSY(), .BTNS(), .RELOAD_REQ(1'b0), .RELOAD_CORE(8'd0),
+    .KBD(), .KBD_WR(), .PS2_CODE(), .PS2_KIND(), .PS2_WR(), .MS_X(), .MS_Y(), .MS_Z(), .MS_B(), .MS_WR(),
+    .JOY_L(), .JOY_R(), .JOY_WR(), .PS2_CMD(16'h0000), .PS2_CMD_WR(1'b0),
+    .LD_KIND(), .LD_SLOT(), .LD_SIZE(), .LD_START(), .LD_ACTIVE(), .LD_END(), .LD_ADDR(), .LD_DATA(),
+    .LD_WR(), .LD_READY(1'b1),
 
-    .RTC_A              (8'h00),
-    .RTC_DI             (8'h00),
-    .RTC_CS             (1'b0),
-    .RTC_WR_N           (1'b1),
-    .UART_TX_DATA       (8'h00),
-    .UART_TX_WR         (1'b0),
-    .UART_TX_MODE       (1'b0),
-    .UART_DLM           (8'h00),
-    .UART_DLL           (8'h00),
-    .UART_DLM_WR        (1'b0),
-    .UART_DLL_WR        (1'b0),
-    .MATRIX_CMD         (24'h000000),
-    .MATRIX_CMD_WR      (1'b0),
-    .DEBUG_ADDR         (16'h0000),
-    .DEBUG_DATA         (16'h0000),
-    .IMG_Q_WR           (1'b0),
-    .IMG_Q_DI           (24'h000000),
-    .SD2_SCK            (),
-    .SD2_MOSI           (SD_DI),
-    .SD2_MISO           (SD_DO),
-    .SD2_CS_N           (SD_CS_N),
+    .OSD_WR(osd_wr), .OSD_WADDR(osd_waddr), .OSD_WDATA(osd_wdata), .OSD_EN(osd_en),
+    .OSD_FG(osd_fg), .OSD_BG(osd_bg), .OSD_ALPHA(osd_alpha), .OSD_PX(osd_px), .OSD_PY(osd_py),
+    .OSD_PW(osd_pw), .OSD_PH(osd_ph), .OSD_PLACE(osd_place), .OSD_ZOOM(osd_zoom),
 
-    .ESP_UART_TX_DATA   (esp_uart_tx_data),
-    .ESP_UART_TX_WR     (esp_uart_tx_wr),
-    .ESP_UART_RX_DATA   (esp_uart_rx_data),
-    .ESP_UART_RX_WR     (esp_uart_rx_wr),
-    .ESP_UART_RX_ACK    (esp_uart_rx_ack),
+    .SDC_IMG_MOUNTED(), .SDC_IMG_SIZE(), .SDC_RD(8'd0), .SDC_WR(8'd0), .SDC_SECTOR(32'd0),
+    .SDC_BUSY(), .SDC_DONE(), .SDC_ERROR(), .SDC_SLOT(), .SDC_BYTE_IN_STROBE(), .SDC_BYTE_ADDR(),
+    .SDC_BYTE_IN_DATA(), .SDC_BYTE_OUT_DATA(8'd0), .IMG_WP(), .IMG_PHYS_WR(), .IMG_PHYS(),
+    .IMG_FLUSH(), .FDD_CHNG_WR(), .FDD_CHNG(), .FDD_CHNG_REQ(1'b0), .FDD_CHNG_DS(2'd0), .IMG_ACTIVE(),
 
-    .OSD_COMMAND        (osd_command),
+    .PORT_OUT_DATA(port_out_data), .PORT_OUT_WR(port_out_wr), .PORT_OUT_READY(4'b1111),
+    .PORT_IN_DATA({ 16'd0, esp_uart_rx_data, 8'd0 }), .PORT_IN_WR({ 2'b00, esp_in_wr, 1'b0 }),
+    .PORT_IN_FULL(port_in_full), .PORT_CFG(128'd0), .PORT_STAT(), .PORT_STAT_WR(),
 
-    .FT_SPI_ON          (mcu_ft_spi_on),
-    .FT_VGA_ON          (mcu_ft_vga_on),
-    .FT_MISO            (FT_SPI_MISO),
-    .FT_MOSI            (mcu_ft_mosi),
-    .FT_CS_N            (mcu_ft_cs_n),
-
-    .DVI_ONLY           (dvi_only),
-
-    .MIDI_DATA          (midi_data),
-    .MIDI_WR            (midi_wr),
-    .MIDI_LOST          ()
+    .FT_SPI_ON(mcu_ft_spi_on), .FT_VGA_ON(mcu_ft_vga_on), .FT_RESET(), .FT_SCK(), .FT_MOSI(mcu_ft_mosi),
+    .FT_MISO(FT_SPI_MISO), .FT_CS_N(mcu_ft_cs_n),
+    .SD2_SCK(), .SD2_MOSI(SD_DI), .SD2_MISO(SD_DO), .SD2_CS_N(SD_CS_N)
 );
 
 //--------- MIDI thru -------
-// the bytes of a USB MIDI keyboard (CMD_MIDI) to the SAM2695 at 31250 baud: the keyboard plays
+// the bytes of a USB MIDI keyboard (PORT 2) to the SAM2695 at 31250 baud: the keyboard plays
 // the synth of the board in the menu (karabas-go-firmware docs/usb_midi_plan.md)
 kg_midi_tx #(.CLK_HZ(40910000)) midi_thru(
 	.clk(clk_sys), .data(midi_data), .wr(midi_wr), .overflow(), .tx(MIDI_TX)
@@ -369,24 +367,23 @@ esp8266 esp8266(
 );
 
 //--------- VGA sync ---------
-wire video_hs, video_vs, video_de;
+wire vga_hs, vga_vs, vga_de;
 vga_sync vga_sync(
     .clk                (clk_sys),
-    .hs                 (video_hs),
-    .vs                 (video_vs),
-    .de                 (video_de)
+    .hs                 (vga_hs),
+    .vs                 (vga_vs),
+    .de                 (vga_de)
 );
 
 //--------- OSD --------------
-// the screen of the menu is the OSD (ALWAYS_ON); its place as overlay.vhd had it at 172 / 60 (sim/tb_eq_overlay.v)
-wire [7:0] osd_r, osd_g, osd_b;
-kg_osd_overlay #(.H_OFFSET(171), .V_OFFSET(60), .H_DIV4_WIDTH(1200), .ALWAYS_ON(1)) overlay(
-    .clk                (clk_sys),
-    .rgb_i              (24'b0),
-    .rgb_o              ({osd_r[7:0], osd_g[7:0], osd_b[7:0]}),
-    .hsync_i            (video_hs),
-    .vsync_i            (video_vs),
-    .osd_command        (osd_command)
+// the screen of the menu is the bitmap OSD over a black frame, scale 3 (768 x 384 of 800 x 600);
+// HDMI takes the syncs as they come out of the overlay (2 clocks later)
+kg_l2_osd_overlay #(.SCALE(3)) overlay(
+    .wclk(clk_sys), .osd_wr(osd_wr), .osd_waddr(osd_waddr), .osd_wdata(osd_wdata), .osd_en(osd_en),
+    .osd_fg(osd_fg), .osd_bg(osd_bg), .osd_alpha(osd_alpha), .osd_px(osd_px), .osd_py(osd_py),
+    .osd_pw(osd_pw), .osd_ph(osd_ph), .osd_place(osd_place), .osd_zoom(osd_zoom),
+    .clk(clk_sys), .rgb_i(24'd0), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
+    .rgb_o({ osd_r, osd_g, osd_b }), .hs_o(video_hs), .vs_o(video_vs), .de_o(video_de)
 );
 
 endmodule
