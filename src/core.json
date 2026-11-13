@@ -1,7 +1,7 @@
 {
     "id": "boot",
     "name": "Boot Menu",
-    "build": "26110116",
+    "build": "26111352",
     "visible": false,
     "type": "boot",
     "order": 1,
@@ -9,8 +9,8 @@
     "buttons": {"btn1": "bootsel", "btn2": {"press": "msc", "hold": "msc2"}},
     "roms": [],
     "boards": {
-        "go": {"bitstream": "karabas_go.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO", "repeat": 1, "then": "effect", "effect": "clock"}},
-        "mini": {"bitstream": "karabas_mini.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO MINI", "repeat": 1, "then": "effect", "effect": "clock"}},
+        "go": {"link": 2, "bitstream": "karabas_go.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO", "repeat": 1, "then": "effect", "effect": "clock"}},
+        "mini": {"link": 2, "bitstream": "karabas_mini.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO MINI", "repeat": 1, "then": "effect", "effect": "clock"}},
         "minig": {"bitstream": "karabas_minig.bin", "link": 2, "matrix": {"mode": "scroll", "text": "KARABAS GO MINI", "repeat": 1, "then": "effect", "effect": "clock"}}
     },
     "osd": [

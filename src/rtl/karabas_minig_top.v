@@ -211,7 +211,7 @@ wire ft_clk_ibufg, ft_clk_int;
 IBUFG ibufg_ft_clk(.I(FT_CLK), .O(ft_clk_ibufg));
 BUFG bufg_ft_clk(.I(ft_clk_ibufg), .O(ft_clk_int));
 
-// the video of the menu: the bitmap OSD over a black frame (below)
+// the video of the menu: the bitmap OSD over the background (below)
 wire [7:0] osd_r, osd_g, osd_b;
 wire video_hs, video_vs, video_de;
 
@@ -375,14 +375,24 @@ vga_sync vga_sync(
     .de                 (vga_de)
 );
 
+//--------- background ---------
+// the glow of the FT812 menu behind the OSD (menu_bg: a gradient that breathes and drifts in tint),
+// one clock behind vga_sync with its syncs
+wire [23:0] bg_rgb;
+wire bg_hs, bg_vs, bg_de;
+menu_bg background(
+    .clk(clk_sys), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
+    .rgb_o(bg_rgb), .hs_o(bg_hs), .vs_o(bg_vs), .de_o(bg_de)
+);
+
 //--------- OSD --------------
-// the screen of the menu is the bitmap OSD over a black frame, scale 3 (768 x 384 of 800 x 600);
+// the screen of the menu is the bitmap OSD over the background, scale 2 (512 x 256 of 800 x 600);
 // HDMI takes the syncs as they come out of the overlay (2 clocks later)
-kg_l2_osd_overlay #(.SCALE(3)) overlay(
+kg_l2_osd_overlay #(.SCALE(2)) overlay(
     .wclk(clk_sys), .osd_wr(osd_wr), .osd_waddr(osd_waddr), .osd_wdata(osd_wdata), .osd_en(osd_en),
     .osd_fg(osd_fg), .osd_bg(osd_bg), .osd_alpha(osd_alpha), .osd_px(osd_px), .osd_py(osd_py),
     .osd_pw(osd_pw), .osd_ph(osd_ph), .osd_place(osd_place), .osd_zoom(osd_zoom),
-    .clk(clk_sys), .rgb_i(24'd0), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
+    .clk(clk_sys), .rgb_i(bg_rgb), .hs_i(bg_hs), .vs_i(bg_vs), .de_i(bg_de),
     .rgb_o({ osd_r, osd_g, osd_b }), .hs_o(video_hs), .vs_o(video_vs), .de_o(video_de)
 );
 
