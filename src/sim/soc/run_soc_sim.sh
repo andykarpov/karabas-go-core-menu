@@ -11,3 +11,6 @@ verilator --cc --exe --build -O2 -j 4 -Wno-fatal -Wno-WIDTH -Wno-UNUSED -Wno-PIN
   tb_menu_soc.v ../../rtl/soc/menu_soc.v ../../rtl/soc/menu_sram.v ../../rtl/soc/vexriscv/VexRiscv.v \
   ../../rtl/vga/menu_video.v ../../rtl/vga/menu_bg.v ../../rtl/vga/menu_compose.v $M/ctl/kg_sync.v $M/mem/kg_sdpram.v $M/mem/kg_tdpram.v $M/mcu/kg_l2_rpc.v tb_menu_soc.cpp > obj_soc.log 2>&1 || { tail -30 obj_soc.log; exit 1; }
 ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin
+# the mouse: the pointer onto the fourth core, two quick clicks start it (buttons latched until read)
+echo "tb_menu_soc: the mouse run"
+TB_MOUSE=1 TB_FRAME=frame_mouse.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|launch"

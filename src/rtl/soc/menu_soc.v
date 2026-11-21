@@ -25,7 +25,9 @@
      1c R  MS: milliseconds since the CPU started
      28 R  KBD0: kg_mcu2 KBD[31:0] = { key 3, key 2, key 1, modifiers } (the USB boot report)
      2c R  KBD1: { 0, key 6, key 5, key 4 }            30 R  KBDN: reports seen (a counter)
-     34 R  MOUSE: bits 31..24 buttons, 23..12 dy sum, 11..0 dx sum (signed, saturated; reading clears)
+     34 R  MOUSE: bits 31..24 buttons (held now, or pressed since the last read: a click of press and
+           release between two reads is not lost), 23..12 dy sum, 11..0 dx sum (signed, saturated;
+           reading clears)
      38 R  JOY: { joy_r, joy_l }
      40 R  US: microseconds since the CPU started
      400..7fc W  PAL: palette entry ((a - 400) / 4) = 0xARRGGBB: alpha 0..15 in bits 31..28 over the
@@ -239,6 +241,7 @@ reg [31:0] frames = 32'd0;
 reg frame_p = 1'b0;
 reg signed [11:0] ms_dx = 12'sd0, ms_dy = 12'sd0;
 reg [7:0] ms_btn = 8'd0;
+reg [7:0] ms_press = 8'd0;   // the buttons pressed since the last read
 reg io_ack = 1'b0;
 reg [31:0] io_dat = 32'd0;
 wire [11:0] io_off = { d_adr[9:0], 2'b00 };
@@ -299,6 +302,7 @@ always @(posedge clk) begin
 		ms_dx <= sat_add(ms_dx, ms_x);
 		ms_dy <= sat_add(ms_dy, ms_y);
 		ms_btn <= ms_b;
+		ms_press <= ms_press | ms_b;
 	end
 	if (reset) begin
 		show <= 1'b0;
@@ -339,7 +343,8 @@ always @(posedge clk) begin
 				8'h2c: io_dat <= { 8'd0, kbd[55:32] };
 				8'h30: io_dat <= kbd_n;
 				8'h34: begin
-					io_dat <= { ms_btn, ms_dy, ms_dx };
+					io_dat <= { ms_btn | ms_press, ms_dy, ms_dx };
+					ms_press <= ms_wr ? ms_b : 8'd0;
 					if (ms_wr) begin
 						ms_dx <= sat_add(12'sd0, ms_x);
 						ms_dy <= sat_add(12'sd0, ms_y);

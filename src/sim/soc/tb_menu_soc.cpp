@@ -207,7 +207,7 @@ int main(int argc, char **argv) {
   uint64_t n = 0, limit = 60000000;
   int phase = 0; // 0 until the list is drawn, 1 Down pressed, 2 released, 3 Enter, 4 launched
   uint64_t t_phase = 0;
-  while (n < limit && phase < 5) {
+  while (n < limit && phase != 5) {
     if (t->l_irq) serve();
     cpu_clocks(200); n += 200;
     if (phase == 0 && console.find("menu: drawn") != std::string::npos) { phase = 1; t_phase = n; }
@@ -216,7 +216,17 @@ int main(int argc, char **argv) {
       static int moves = 0;
       if (moves < 15) {
         t->ms_x = 0; t->ms_y = 0xFB; t->ms_b = 0; t->ms_wr = 1; cpu_clock(); t->ms_wr = 0; moves++; t_phase = n;
-      } else if (n - t_phase > 400000) { phase = 3; cap_state = 1; t_phase = n; }
+      } else if (n - t_phase > 400000) { phase = 6; cap_state = 1; t_phase = n; }
+    }
+    // TB_MOUSE: after the frame two quick clicks (press and release two clocks apart, between two
+    // reads of the CPU): the first selects the core under the pointer, the second starts it
+    else if (phase == 6 && cap_state == 3 && n - t_phase > 1500000) {  // 20 ms apart
+      static int clicks = 0;
+      if (clicks < 2) {
+        t->ms_x = 0; t->ms_y = 0; t->ms_b = 1; t->ms_wr = 1; cpu_clock(); t->ms_wr = 0; cpu_clocks(2);
+        t->ms_b = 0; t->ms_wr = 1; cpu_clock(); t->ms_wr = 0;
+        clicks++; t_phase = n; printf("tb_menu_soc: click %d at %llu\n", clicks, (unsigned long long) n);
+      } else phase = 4;
     }
     else if (phase == 1 && !getenv("TB_MOUSE") && n - t_phase > 300000) { t->kbd = (uint64_t) 0x51 << 8; phase = 2; t_phase = n; }        // Down
     else if (phase == 2 && n - t_phase > 600000) { t->kbd = 0; phase = 3; t_phase = n; cap_state = 1; }
@@ -239,11 +249,13 @@ int main(int argc, char **argv) {
     // the button colour 0x202026 (the defaults of the firmware): a pixel left of the text
     uint32_t b1 = frame[(88 + 16) * 800 + 220], b2 = frame[(88 + 40 + 16) * 800 + 220];
     if (white < 1000) { printf("tb_menu_soc: %d white pixels, no text\n", white); errors++; }
+    if (getenv("TB_MOUSE")) b1 = 0x202026, b2 = 0x0000c8;  // the frame is before the clicks: not checked
     if (b2 != 0x0000c8) { printf("tb_menu_soc: the second button is not active (%06x)\n", b2); errors++; }
     if (b1 != 0x202026) { printf("tb_menu_soc: the first button is not a button (%06x)\n", b1); errors++; }
     printf("tb_menu_soc: frame.ppm, %d white, %d selection pixels\n", white, selc);
   }
-  if (launched != "b.kg") { printf("tb_menu_soc: launched '%s', want b.kg\n", launched.c_str()); errors++; }
+  const char *want = getenv("TB_MOUSE") ? "d.kg" : "b.kg";  // the pointer is on the fourth core
+  if (launched != want) { printf("tb_menu_soc: launched '%s', want %s\n", launched.c_str(), want); errors++; }
   else printf("tb_menu_soc: LAUNCH %s after the clear\n", launched.c_str());
   printf("tb_menu_soc: %d errors\n", errors);
   delete t;
