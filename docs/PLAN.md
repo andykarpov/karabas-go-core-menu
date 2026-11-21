@@ -84,6 +84,12 @@ memory map of the CPU has slots for the two ports, RPC FS stays in the spec.
   for an old boot.kg comes with Ф4 (the firmware menu goes then). Test builds run as `menutest.kg`
   of type osd (CORES in its HELLO); a boot type core cannot be started by AT load.
 
+- Ф2 look APPROVED by the user 2026-11-21 ("1-в-1", docs/img/f2_compare_teal.png, 8464ada): the
+  core list hides the cores with `visible: false` (the boot core too: that is what the flag is for).
+  Left in Ф2: the mouse pointer with the hover frame, the autoload gauge on the button, the key and
+  start sounds. Checked in the firmware: with the OSD closed (a boot core with RPC) no key reaches the
+  screens of the firmware (osd_ui.c: only while is_osd; osd_toggle does nothing in the boot core).
+
 ## Open items
 
 - The menu resolution: 800 x 600 now; the FT modes of `ft_height()` go away.
