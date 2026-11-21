@@ -164,3 +164,60 @@ void gfx_indexed(int x, int y, int w, int h, int scale, const uint8_t *px, const
       if (v) gfx_fill(x + i * scale, y + j * scale, scale, scale, map[v]);
     }
 }
+
+void gfx_ring(int cx, int cy, int r, ramp_t ramp) {
+  for (int y = cy - r - 1; y <= cy + r; y++)
+    for (int x = cx - r - 1; x <= cx + r; x++) {
+      int c = disc_cov(x * 4, y * 4, cx * 4, cy * 4, r * 4) - disc_cov(x * 4, y * 4, cx * 4, cy * 4, r * 4 - 8);
+      if (c > 0) pset(x, y, (uint8_t) (ramp + c - 1));
+    }
+}
+
+// sin of 0..90 degrees in steps of 6, x 256
+static const uint16_t sin6[16] = { 0, 27, 53, 79, 104, 128, 150, 171, 190, 207, 222, 234, 243, 250, 255, 256 };
+static int s90(int a) {   // sin of 0..90 degrees, x 256
+  int i = a / 6, f = a % 6;
+  return i >= 15 ? 256 : sin6[i] + (sin6[i + 1] - sin6[i]) * f / 6;
+}
+static int isin(int deg) {
+  deg %= 360; if (deg < 0) deg += 360;
+  int q = deg / 90, d = deg % 90;
+  return q == 0 ? s90(d) : q == 1 ? s90(90 - d) : q == 2 ? -s90(d) : -s90(90 - d);
+}
+
+void gfx_hand(int cx, int cy, int len, int deg, ramp_t ramp) {
+  int sx = isin(deg), sy = -isin(deg + 90);   // x right, y down
+  for (int t = 0; t <= len * 2; t++) {
+    int x = cx + sx * t / 512, y = cy + sy * t / 512;
+    gfx_fill(x, y, 2, 2, RAMP_FULL(ramp));
+  }
+}
+
+// ---- the sprite (the mouse pointer) ----
+#define SPR_MAX_W 16
+#define SPR_MAX_H 20
+static uint8_t under[SPR_MAX_W * SPR_MAX_H];
+static int spr_x, spr_y, spr_w, spr_h, spr_on = 0;
+static const char *const *spr_art;
+
+void gfx_sprite_hide(void) {
+  if (!spr_on) return;
+  for (int j = 0; j < spr_h; j++)
+    for (int i = 0; i < spr_w; i++)
+      if (spr_art[j][i] != ' ') pset(spr_x + i, spr_y + j, under[j * SPR_MAX_W + i]);
+  spr_on = 0;
+}
+
+void gfx_sprite_show(int x, int y, const char *const *art, int w, int h, uint8_t c_dark, uint8_t c_light) {
+  gfx_sprite_hide();
+  spr_x = x; spr_y = y; spr_w = w; spr_h = h; spr_art = art;
+  for (int j = 0; j < h; j++)
+    for (int i = 0; i < w; i++) {
+      char c = art[j][i];
+      if (c == ' ') continue;
+      int px = x + i, py = y + j;
+      under[j * SPR_MAX_W + i] = ((unsigned) px < FB_W && (unsigned) py < FB_H) ? fb[py * FB_W + px] : 0;
+      pset(px, py, c == 'X' ? c_dark : c_light);
+    }
+  spr_on = 1;
+}

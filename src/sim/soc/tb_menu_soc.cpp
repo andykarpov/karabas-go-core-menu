@@ -162,7 +162,12 @@ static void serve() {
     if (i < NCORES) { put_s(out, files[i]); put_s(out, names[i]); put_s(out, "26112101"); put_s(out, names[i]); put_s(out, "3"); }
     else st = 3;
   }
-  else if (r.svc == 2 && r.fn == 3) { out.push_back(0); put_s(out, ""); }
+  else if (r.svc == 2 && r.fn == 3) {
+    // TB_AUTOLOAD=seconds,file: the autoload of karabas.ini
+    const char *a = getenv("TB_AUTOLOAD");
+    if (a) { out.push_back((uint8_t) atoi(a)); put_s(out, strchr(a, ',') + 1); }
+    else { out.push_back(0); put_s(out, ""); }
+  }
   else if (r.svc == 2 && r.fn == 2) { launched = std::string((const char *) r.data.data()); return; }
   else st = 1;
   if (!respond(r.id, st, out)) { printf("tb_menu_soc: RESP %u refused\n", r.id); errors++; }
@@ -206,7 +211,14 @@ int main(int argc, char **argv) {
     if (t->l_irq) serve();
     cpu_clocks(200); n += 200;
     if (phase == 0 && console.find("menu: drawn") != std::string::npos) { phase = 1; t_phase = n; }
-    else if (phase == 1 && n - t_phase > 300000) { t->kbd = (uint64_t) 0x51 << 8; phase = 2; t_phase = n; }        // Down
+    else if (phase == 1 && getenv("TB_MOUSE") && n - t_phase > 300000) {
+      // TB_MOUSE: the pointer onto the fourth button (reports of +40 / +40 until there), then a frame
+      static int moves = 0;
+      if (moves < 15) {
+        t->ms_x = 0; t->ms_y = 0xFB; t->ms_b = 0; t->ms_wr = 1; cpu_clock(); t->ms_wr = 0; moves++; t_phase = n;
+      } else if (n - t_phase > 400000) { phase = 3; cap_state = 1; t_phase = n; }
+    }
+    else if (phase == 1 && !getenv("TB_MOUSE") && n - t_phase > 300000) { t->kbd = (uint64_t) 0x51 << 8; phase = 2; t_phase = n; }        // Down
     else if (phase == 2 && n - t_phase > 600000) { t->kbd = 0; phase = 3; t_phase = n; cap_state = 1; }
     else if (phase == 3 && cap_state == 3 && n - t_phase > 600000) { t->kbd = (uint64_t) 0x28 << 8; phase = 4; t_phase = n; } // Enter
     else if (phase == 4 && !launched.empty()) phase = 5;

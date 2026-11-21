@@ -22,6 +22,11 @@ void gfx_clear(int x, int y, int w, int h);                 // transparent: the 
 void gfx_fill(int x, int y, int w, int h, uint8_t idx);
 void gfx_round_rect(int x, int y, int w, int h, int r, ramp_t ramp);
 void gfx_circle(int cx, int cy, int r, ramp_t ramp);
+void gfx_ring(int cx, int cy, int r, ramp_t ramp);          // a ring 2 px wide inside radius r
+void gfx_hand(int cx, int cy, int len, int deg, ramp_t ramp); // a line 2 px wide from the centre, deg clockwise from up
+// a sprite with the pixels under it kept: art rows of ' ' (none), 'X' (c_dark), '.' (c_light)
+void gfx_sprite_show(int x, int y, const char *const *art, int w, int h, uint8_t c_dark, uint8_t c_light);
+void gfx_sprite_hide(void);
 // text: surface 0 = over the background (ramp = an alpha ramp), else a ramp blended over it
 int gfx_text_width(const font_t *f, const char *s);
 void gfx_text(const font_t *f, int x, int y, const char *s, ramp_t ramp);  // y: the top of the line
