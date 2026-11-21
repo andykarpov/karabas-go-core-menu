@@ -226,9 +226,10 @@ NET "FLASH_HOLD_N"     LOC="P12"    | IOSTANDARD = LVCMOS33; # CONF_IO3
 # after it are those of the board (the video DAC of the Go, the FT812 and HDMI clocks of the Mini / Mini G).
 #
 # Clocks, all from one PLL on CLK_50MHZ (VCO 450 MHz), phase 0 (rtl/karabas_*_top.v):
-#   pll_clk<0> 40.91 MHz clk_sys: the menu (OSD and its 800 x 600 video, MCU link, ESP uart, ADC, DACs)
+#   pll_clk<0> 40.91 MHz clk_sys: the 800 x 600 video (menu_video, the OSD overlay), HDMI, ADC, DACs
 #   pll_clk<1>  8.18 MHz clk_8:   FT_CLK_OUT and DCM_CLKGEN of the Mini / Mini G (on the Go: 12.16 MHz MIDI_CLK)
-#   pll_clk<2> 12.16 MHz          MIDI_CLK of the Mini
+#   pll_clk<2> 75 MHz    clk_cpu: (Mini G, the self-drawing menu, docs/PLAN.md) the menu CPU, the SRAM, the MCU link
+#                                 (kg_mcu2), the ESP and MIDI uarts; (Mini) 12.16 MHz MIDI_CLK
 # The PERIOD of CLK_50MHZ is derived onto every PLL output (and the HDMI DCMs). The ucf had PERIODs of 40 and 8 MHz
 # on clk_sys and clk_8 (they are 40.91 and 8.18), 30 MHz on MCU_SCK and a TIG on the measured FT frequency, a path
 # that is real. No clock comes from logic and there are no latches (the OSD had its counters, its pixel shifter and
@@ -239,6 +240,22 @@ TIMESPEC "TS_CLK_50MHZ" = PERIOD "CLK_50MHZ" 20 ns HIGH 50%;
 
 # on the BUFG of clk_sys: the PLL output also drives the BUFGMUX of the HDMI pixel clock (Mini, Mini G)
 NET "clk_sys" TNM_NET = "TG_CLK_SYS";
+NET "pll_clk<2>" TNM_NET = "TG_CLK_CPU";
+# clk_sys (450 / 11) and clk_cpu (450 / 6) come from one VCO but have no common period short enough for the
+# analysis (their nearest edges are one VCO period apart). The paths between them are crossings only: kg_sync
+# toggles (the line requests of menu_video, the shown buffer, the frame), the line buffer and the palette (block
+# RAM, written on clk_cpu, read on clk_pix), the line number taken with its toggle (stable two clocks before it is
+# used), the settings of the OSD overlay (taken at the start of a frame) and of hdmi_top (two clk_sys flip-flops in
+# the top): their data paths are bounded by one clk_cpu period.
+TIMESPEC "TS_CPU_TO_SYS" = FROM "TG_CLK_CPU" TO "TG_CLK_SYS" 13.3 ns DATAPATHONLY;
+TIMESPEC "TS_SYS_TO_CPU" = FROM "TG_CLK_SYS" TO "TG_CLK_CPU" 13.3 ns DATAPATHONLY;
+
+# The SRAM (menu_sram, 10 ns): MA / MWR_N / MRD_N / MD out of IOB flip-flops on clk_cpu, MD into an IOB flip-flop
+# at the end of a two-clock read (26.7 ns: the 8 ns out, 10 ns of the SRAM, 4 ns in), as doom_sram.
+TIMEGRP "TG_SRAM_IN" = PADS("MD<*>");
+TIMEGRP "TG_SRAM_OUT" = "TG_SRAM_IN" PADS("MA<*>") PADS("MWR_N<*>") PADS("MRD_N<*>");
+TIMESPEC "TS_SRAM_OUT" = FROM FFS TO "TG_SRAM_OUT" 8 ns DATAPATHONLY;
+TIMESPEC "TS_SRAM_IN" = FROM "TG_SRAM_IN" TO FFS 4 ns DATAPATHONLY;
 
 # MCU link (kg_mcu): SPI mode 0 from the RP2040 at 16 MHz (bursts would go at that speed too, BURST_MAX_MHZ 0);
 # bounded at 32 MHz as in the other cores.
@@ -249,6 +266,9 @@ TIMESPEC "TS_CLK_MCU" = PERIOD "TG_CLK_MCU" 32 MHz;
 # or from the request to the next SCK edges (a reply word): their data paths are bounded by one SCK period.
 TIMESPEC "TS_MCU_TO_SYS" = FROM "TG_CLK_MCU" TO "TG_CLK_SYS" 31.25 ns DATAPATHONLY;
 TIMESPEC "TS_SYS_TO_MCU" = FROM "TG_CLK_SYS" TO "TG_CLK_MCU" 31.25 ns DATAPATHONLY;
+# Mini G: kg_mcu2 on clk_cpu, the same bounds
+TIMESPEC "TS_MCU_TO_CPU" = FROM "TG_CLK_MCU" TO "TG_CLK_CPU" 31.25 ns DATAPATHONLY;
+TIMESPEC "TS_CPU_TO_MCU" = FROM "TG_CLK_CPU" TO "TG_CLK_MCU" 31.25 ns DATAPATHONLY;
 
 # ---- Mini, Mini G: FT812 and HDMI -------------------------------------------------------------------------------
 # FT_CLK: the pixel clock of the FT812 (its video goes to HDMI with ft_sel = vdac2_sel), up to 80 MHz. The FT812
@@ -272,6 +292,11 @@ NET "hdmi_top/p_clk_int" TNM_NET = "TG_CLK_PIX"; # the output of the BUFGMUX clk
 # `make <board>-coremode` analyses the routed design without the PERIODs of the FT mode and this bound, so these
 # paths get the setup and hold of clk_sys.
 TIMESPEC "TS_SYS_TO_PIX" = FROM "TG_CLK_SYS" TO "TG_CLK_PIX" 24.4 ns DATAPATHONLY;
+# The paths inside the pixel clock: its PERIOD derived by ngdbuild from clk_8 and the static multiplier of
+# DCM_CLKGEN (TS_hdmi_top_hdmi_pll_clkgen, 30.5 ns) is the one trce applies to them, TS_CLKGEN above analyses no
+# path. The boot core runs HDMI on clk_sys only (the firmware starts no FT mode for it): bound them by its period,
+# so PAR sees what -coremode checks (the Mini G met 25.5 ns paths of the TMDS encoders by luck before).
+TIMESPEC "TS_PIX" = FROM "TG_CLK_PIX" TO "TG_CLK_PIX" 24.4 ns;
 # FT812 video: taken at the falling FT_CLK, then into the pixel clock through kg_async_fifo (the pixel clock has the
 # frequency of FT_CLK, both from clk_8, and an unknown phase): its Gray pointers and its memory cross, bounded by
 # one FT_CLK period (a pointer is taken one clock later, a word read two clocks after its write at the earliest).
@@ -284,3 +309,12 @@ TIMESPEC "TS_FT_TO_SYS" = FROM "TG_CLK_FT" TO "TG_CLK_SYS" 12.5 ns DATAPATHONLY;
 # The select of the BUFGMUX of hdmi_pll (mux_sel = vdac2_sel, a clk_sys register): a BUFGMUX switches without a
 # glitch at any time of S; its setup to the input clocks only decides at which of their edges.
 NET "hdmi_top/hdmi_pll/mux_sel" TIG;
+# The TMDS words (OUTPUT_REG of hdmi_tx, pixel clock) -> the 5x shift registers of the serializers. With the PERIODs
+# of the FT mode trce times them at 6.1 ns (the clocks of DCM_CLKGEN), so PAR routed them up to 4 ns long; in the
+# mode of the menu (-coremode, the PERIOD of clk_sys / 5) they have 4.9 ns minus 0.35 ns skew and 0.55 ns
+# uncertainty (Mini: -0.2 to -1 ns with map -t 2 to 5; the Mini G met it by its placement). The bound makes PAR
+# keep them short in both modes; it only tightens. The load phase of the serializer is set by its reset, not by
+# the pixel clock: no multicycle.
+INST "hdmi_top/hdmi_tx/ser_d_*" TNM = "TG_SER_D";
+INST "hdmi_top/hdmi_tx/chn*shift_r_*" TNM = "TG_SER_SHIFT";
+TIMESPEC "TS_SER_D" = FROM "TG_SER_D" TO "TG_SER_SHIFT" 3.5 ns DATAPATHONLY;

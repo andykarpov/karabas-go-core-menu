@@ -21,7 +21,7 @@
 -- FPGA Boot menu core for Karabas-Go Mini
 --
 -- @author Andy Karpov <andy.karpov@gmail.com>
--- EU, 2025
+-- EU, 2026
 ------------------------------------------------------------------------------------------------------------------*/
 
 // HW_ID2: defined in karabas_mini.xst
@@ -125,8 +125,6 @@ module karabas_mini_top (
 );
 
 // unused signals yet
-assign ESP_RESET_N        = 1'bZ;
-assign ESP_BOOT_N         = 1'bZ;
 assign FLASH_CS_N         = 1'b1;
 assign FLASH_DI           = 1'b1;
 assign FLASH_SCK          = 1'b0;
@@ -142,26 +140,31 @@ assign WRESET_N           = 1'b1;
 // MIDI_TX: the thru of a USB MIDI keyboard (PORT 2 of kg_mcu2) to the SAM2695, below
 wire [7:0] midi_data;
 wire midi_wr;
-assign MIDI_RESET_N	= 1'b1;
-assign TAPE_OUT		= 1'b0;
-assign SDR_A			= 13'b0;
-assign SDR_CLK			= 1'b1;
-assign SDR_BA	 		= 2'b11;
-assign SDR_DQM			= 2'b11;
-assign WA				= 3'b000;
+assign TAPE_OUT           = 1'b0;
+assign SDR_A              = 13'b0;
+assign SDR_CLK            = 1'b1;
+assign SDR_BA             = 2'b11;
+assign SDR_DQM            = 2'b11;
+assign WA                 = 3'b000;
+assign ESP_RESET_N        = 1'bZ;
+assign ESP_BOOT_N         = 1'bZ;
+assign MIDI_RESET_N       = 1'b1;
 
 // system clocks
-wire clk_sys, clk_sys_pll, clk_8mhz, clk_12mhz;
+wire clk_sys, clk_sys_pll, clk_8mhz, clk_cpu, clk_12mhz;
 wire locked, areset;
+wire signed [15:0] snd_out;   // the PCM sounds of menu_soc (clk_cpu)
+wire snd_t;
 
-// VCO 50 * 18 / 2 = 450 MHz, phase 0: clk_sys 40.91 MHz (/11: the menu, its 800 x 600 video, the MCU link),
-// clk_8 8.18 MHz (/55: FT_CLK_OUT, the base of DCM_CLKGEN in hdmi_pll), 12.16 MHz (/37: MIDI_CLK). The PLL output
-// of clk_sys has no BUFG in kg_pll: it drives the BUFG of clk_sys and the BUFGMUX of hdmi_pll.
+// VCO 50 * 18 / 2 = 450 MHz, phase 0: clk_sys 40.91 MHz (/11: the 800 x 600 video, HDMI, audio), clk_8 8.18 MHz
+// (/55: FT_CLK_OUT, the base of DCM_CLKGEN in hdmi_pll), clk_cpu 75 MHz (/6: the menu CPU, the SRAM, the MCU link,
+// the ESP and MIDI uarts), clk_12 12.16 MHz (/37: MIDI_CLK of the SAM2695). The PLL output of clk_sys has no BUFG in kg_pll: it drives the BUFG of clk_sys and the
+// BUFGMUX of hdmi_pll.
 wire [5:0] pll_clk;
 kg_pll #(
     .DIVCLK_DIVIDE(2), .CLKFBOUT_MULT(18),
-    .CLKOUT0_DIVIDE(11), .CLKOUT1_DIVIDE(55), .CLKOUT2_DIVIDE(37),
-    .BUFG_MASK(6'b000110)
+    .CLKOUT0_DIVIDE(11), .CLKOUT1_DIVIDE(55), .CLKOUT2_DIVIDE(6), .CLKOUT3_DIVIDE(37),
+    .BUFG_MASK(6'b001110)
 ) pll (
     .clk_in              (CLK_50MHZ),
     .rst                 (1'b0),
@@ -170,37 +173,36 @@ kg_pll #(
 );
 assign clk_sys_pll = pll_clk[0];
 assign clk_8mhz = pll_clk[1];
-assign clk_12mhz = pll_clk[2];
+assign clk_cpu = pll_clk[2];
+assign clk_12mhz = pll_clk[3];
+ODDR2 u_midi_clk (.Q(MIDI_CLK), .C0(clk_12mhz), .C1(~clk_12mhz), .CE(1'b1), .D0(1'b1), .D1(1'b0), .R(1'b0), .S(1'b0));
 BUFG bufg_clk_sys(.I(clk_sys_pll), .O(clk_sys));
 assign areset = ~locked;
 
-// the SRAM is filled with zeros once after the PLL lock (0.2 s), so the next core starts with clean memory
-wire [15:0] sram_data;
-wire sram_data_oe;
-sram_clear sram_clear (
-    .clk                (clk_sys),
-    .reset              (areset),
-    .addr               (MA),
-    .data               (sram_data),
-    .data_oe            (sram_data_oe),
-    .we_n               (MWR_N),
-    .rd_n               (MRD_N),
-    .done               ()
-);
-assign MD = sram_data_oe ? sram_data : 16'bz;
-
-// midi clk 12mhz out
-ODDR2 u_midi_clk (.Q(MIDI_CLK), .C0(clk_12mhz), .C1(~clk_12mhz), .CE(1'b1), .D0(1'b1), .D1(1'b0), .R(1'b0), .S(1'b0));
+// the reset of the clk_cpu side, synchronous to it
+reg [1:0] areset_cpu = 2'b11;
+always @(posedge clk_cpu) areset_cpu <= { areset_cpu[0], areset };
+wire reset_cpu = areset_cpu[1];
 
 // ft clk 8mhz out
 ODDR2 u_ft_clk (.Q(FT_CLK_OUT), .C0(clk_8mhz), .C1(~clk_8mhz), .CE(1'b1), .D0(1'b1), .D1(1'b0), .R(1'b0), .S(1'b0));
 
+// MCU_SCK is not on a clock pin before rev.G: local routing (as the old menu)
+wire mcu_sck = MCU_SCK;
+
 // ft control signals / mcu only access
-wire vdac2_sel = mcu_ft_vga_on;
+// kg_mcu2 runs on clk_cpu: its FT video and DVI settings into clk_sys first (hdmi_top takes clk_sys registers)
+reg [1:0] ft_vga_s = 2'b00, dvi_only_s = 2'b00;
+always @(posedge clk_sys) begin
+    ft_vga_s <= { ft_vga_s[0], mcu_ft_vga_on };
+    dvi_only_s <= { dvi_only_s[0], dvi_only };
+end
+wire vdac2_sel = ft_vga_s[1];
 assign FT_SPI_CS_N = mcu_ft_spi_on ? mcu_ft_cs_n : 1'b1;
 assign FT_SPI_SCK = mcu_ft_spi_on ? MCU_SCK : 1'b1;
-assign SD_CLK = MCU_SCK;   // the SD2 pass-through (MCU_SCK is not on a clock pin before rev.G)
 assign FT_RESET = ~mcu_ft_reset;
+// the SD2 pass-through takes the IBUFG output too (a BUFG does not drive a pad)
+assign SD_CLK = MCU_SCK;   // the SD2 pass-through (MCU_SCK is not on a clock pin before rev.G)
 assign FT_SPI_MOSI = mcu_ft_spi_on ? mcu_ft_mosi : 1'b1;
 
 // FT_CLK: the pixel clock of the FT812 (its video is taken on its falling edge, hdmi_pll measures it). It was a
@@ -233,7 +235,7 @@ hdmi_top #(.SAMPLERATE(48000)) hdmi_top(
 
     .ft_sel             (vdac2_sel),
 
-    .audio_en           (~dvi_only),
+    .audio_en           (~dvi_only_s[1]),
     .audio_l            (audio_mix_l),
     .audio_r            (audio_mix_r),
 
@@ -262,8 +264,23 @@ i2s_transceiver adc(
 ODDR2 oddr_adc2(.Q(ADC_CLK), .C0(clk_sys), .C1(~clk_sys), .CE(1'b1), .D0(1'b1), .D1(1'b0), .R(1'b0), .S(1'b0));
 
 // ------- audio mix
-wire [15:0] audio_mix_l = adc_l[23:8];
-wire [15:0] audio_mix_r = adc_r[23:8];
+// the PCM sounds of the menu (menu_sound, clk_cpu: a value with each snd_t toggle) added to the ADC
+// (the SAM2695 and the line in) with saturation
+reg [2:0] snd_t_s = 3'd0;
+reg signed [15:0] snd_s = 16'sd0;
+always @(posedge clk_sys) begin
+    snd_t_s <= { snd_t_s[1:0], snd_t };
+    if (snd_t_s[2] != snd_t_s[1]) snd_s <= snd_out;   // stable: it changed with the toggle
+end
+function [15:0] sat_add16(input [15:0] a, input [15:0] b);
+    reg signed [16:0] s;
+    begin
+        s = $signed({ a[15], a }) + $signed({ b[15], b });
+        sat_add16 = (s > 17'sd32767) ? 16'h7FFF : (s < -17'sd32768) ? 16'h8000 : s[15:0];
+    end
+endfunction
+wire [15:0] audio_mix_l = sat_add16(adc_l[23:8], snd_s);
+wire [15:0] audio_mix_r = sat_add16(adc_r[23:8], snd_s);
 
 //------- Sigma-Delta DAC ---------
 kg_sigma_delta_dac #(.MSBI(15)) dac_l(
@@ -292,6 +309,19 @@ assign MCU_IO[1] = mcu_int;
 assign MCU_IO[0] = 1'bz;
 assign MCU_IO[3:2] = 2'bzz;
 
+// HID and the loader of kg_mcu2 for menu_soc
+wire [55:0] kbd;
+wire kbd_wr, ms_wr;
+wire [7:0] ms_x, ms_y, ms_b;
+wire [15:0] joy_l, joy_r;
+wire [1:0] ld_kind;
+wire ld_active, ld_end, ld_wr, ld_ready;
+wire [31:0] ld_addr;
+wire [7:0] ld_data;
+// the RPC mailbox of kg_mcu2 (target 08) for menu_soc
+wire [10:0] rpc_a;
+wire rpc_we;
+wire [7:0] rpc_wd, rpc_rd;
 wire osd_wr, osd_en, osd_zoom;
 wire [11:0] osd_waddr;
 wire [7:0] osd_wdata;
@@ -303,29 +333,40 @@ wire [5:0] osd_pw;
 wire [31:0] port_out_data;
 wire [3:0] port_out_wr, port_in_full;
 
-// the ESP: its byte is held until the ack; taken when port 1 has room
-wire esp_in_wr = esp_uart_rx_wr && !port_in_full[1];
-assign esp_uart_rx_ack = esp_in_wr;
-assign esp_uart_tx_data = port_out_data[15:8];
-assign esp_uart_tx_wr = port_out_wr[1];
-assign midi_data = port_out_data[23:16];
-assign midi_wr = port_out_wr[2];
+// the ESP: its byte is held until the ack; taken when port 1 has room, or by the menu CPU while it
+// has the uart (esp_own: Setup > Wi-Fi, NTP sync; the MCU gets nothing meanwhile)
+wire esp_own, cpu_esp_ack, cpu_esp_wr;
+wire [7:0] cpu_esp_data;
+wire esp_in_wr = esp_uart_rx_wr && !port_in_full[1] && !esp_own;
+assign esp_uart_rx_ack = esp_own ? cpu_esp_ack : esp_in_wr;
+assign esp_uart_tx_data = esp_own ? cpu_esp_data : port_out_data[15:8];
+assign esp_uart_tx_wr = esp_own ? cpu_esp_wr : port_out_wr[1];
+// MIDI: the keyboard of PORT 2 and the sounds of the menu CPU, switched at whole messages
+wire [7:0] cpu_midi_data;
+wire cpu_midi_wr, cpu_midi_full, kb_midi_ready;
+menu_midi_mux midi_mux (
+    .clk(clk_cpu),
+    .kb_data(port_out_data[23:16]), .kb_wr(port_out_wr[2]), .kb_ready(kb_midi_ready),
+    .cpu_data(cpu_midi_data), .cpu_wr(cpu_midi_wr), .cpu_full(cpu_midi_full),
+    .tx_data(midi_data), .tx_wr(midi_wr)
+);
 
 kg_mcu2 #(
-    .CAPS(16'h0200), .SW_N(2), .CS_FILTER(3),
+    .CAPS(16'h0210), .SW_N(2), .CS_FILTER(3), // CAPS bit 9 MIDI IN, bit 4 the core drives LD_READY (the menu program is loaded into the SRAM)
     .ENABLE_OSD(1), .ENABLE_PORTS(4'b0110), .PORT_IN_AW(6),
-    .ENABLE_FT(1), .ENABLE_SD2(1)
+    .ENABLE_FT(1), .ENABLE_SD2(1),
+    .ENABLE_RPC(1), .RPC_SERVICES(16'h000F)    // SYS, CFG, CORES, HID (karabas-go-firmware docs/link_v2.md 5.9)
 ) mcu(
-    .CLK(clk_sys), .N_RESET(~areset),
-    .MCU_SCK(MCU_SCK), .MCU_MOSI(MCU_MOSI), .MCU_MISO(MCU_MISO), .MCU_SS(MCU_CS_N), .MCU_INT(mcu_int),
+    .CLK(clk_cpu), .N_RESET(~reset_cpu),
+    .MCU_SCK(mcu_sck), .MCU_MOSI(MCU_MOSI), .MCU_MISO(MCU_MISO), .MCU_SS(MCU_CS_N), .MCU_INT(mcu_int),
     .MCU_SPI_FT_SS(MCU_IO[3]), .MCU_SPI_SD2_SS(MCU_IO[2]),
 
     .SW(), .SW_WR(), .SW_INDEX(), .SW_VALUE(), .HW_ID(), .DVI_ONLY(dvi_only), .CORE_BUILD(), .FW_BUILD(),
     .BUSY(), .BTNS(), .RELOAD_REQ(1'b0), .RELOAD_CORE(8'd0),
-    .KBD(), .KBD_WR(), .PS2_CODE(), .PS2_KIND(), .PS2_WR(), .MS_X(), .MS_Y(), .MS_Z(), .MS_B(), .MS_WR(),
-    .JOY_L(), .JOY_R(), .JOY_WR(), .PS2_CMD(16'h0000), .PS2_CMD_WR(1'b0),
-    .LD_KIND(), .LD_SLOT(), .LD_SIZE(), .LD_START(), .LD_ACTIVE(), .LD_END(), .LD_ADDR(), .LD_DATA(),
-    .LD_WR(), .LD_READY(1'b1),
+    .KBD(kbd), .KBD_WR(kbd_wr), .PS2_CODE(), .PS2_KIND(), .PS2_WR(), .MS_X(ms_x), .MS_Y(ms_y), .MS_Z(),
+    .MS_B(ms_b), .MS_WR(ms_wr), .JOY_L(joy_l), .JOY_R(joy_r), .JOY_WR(), .PS2_CMD(16'h0000), .PS2_CMD_WR(1'b0),
+    .LD_KIND(ld_kind), .LD_SLOT(), .LD_SIZE(), .LD_START(), .LD_ACTIVE(ld_active), .LD_END(ld_end),
+    .LD_ADDR(ld_addr), .LD_DATA(ld_data), .LD_WR(ld_wr), .LD_READY(ld_ready),
 
     .OSD_WR(osd_wr), .OSD_WADDR(osd_waddr), .OSD_WDATA(osd_wdata), .OSD_EN(osd_en),
     .OSD_FG(osd_fg), .OSD_BG(osd_bg), .OSD_ALPHA(osd_alpha), .OSD_PX(osd_px), .OSD_PY(osd_py),
@@ -336,26 +377,27 @@ kg_mcu2 #(
     .SDC_BYTE_IN_DATA(), .SDC_BYTE_OUT_DATA(8'd0), .IMG_WP(), .IMG_PHYS_WR(), .IMG_PHYS(),
     .IMG_FLUSH(), .FDD_CHNG_WR(), .FDD_CHNG(), .FDD_CHNG_REQ(1'b0), .FDD_CHNG_DS(2'd0), .IMG_ACTIVE(),
 
-    .PORT_OUT_DATA(port_out_data), .PORT_OUT_WR(port_out_wr), .PORT_OUT_READY(4'b1111),
+    .PORT_OUT_DATA(port_out_data), .PORT_OUT_WR(port_out_wr), .PORT_OUT_READY({ 1'b1, kb_midi_ready, 2'b11 }),
     .PORT_IN_DATA({ 16'd0, esp_uart_rx_data, 8'd0 }), .PORT_IN_WR({ 2'b00, esp_in_wr, 1'b0 }),
     .PORT_IN_FULL(port_in_full), .PORT_CFG(128'd0), .PORT_STAT(), .PORT_STAT_WR(),
 
     .FT_SPI_ON(mcu_ft_spi_on), .FT_VGA_ON(mcu_ft_vga_on), .FT_RESET(mcu_ft_reset), .FT_SCK(), .FT_MOSI(mcu_ft_mosi),
     .FT_MISO(FT_SPI_MISO), .FT_CS_N(mcu_ft_cs_n),
+    .RPC_A(rpc_a), .RPC_WE(rpc_we), .RPC_WD(rpc_wd), .RPC_RD(rpc_rd),
     .SD2_SCK(), .SD2_MOSI(SD_DI), .SD2_MISO(SD_DO), .SD2_CS_N(SD_CS_N)
 );
 
 //--------- MIDI thru -------
 // the bytes of a USB MIDI keyboard (PORT 2) to the SAM2695 at 31250 baud: the keyboard plays
 // the synth of the board in the menu (karabas-go-firmware docs/usb_midi_plan.md)
-kg_midi_tx #(.CLK_HZ(40910000)) midi_thru(
-	.clk(clk_sys), .data(midi_data), .wr(midi_wr), .overflow(), .tx(MIDI_TX)
+kg_midi_tx #(.CLK_HZ(75000000)) midi_thru(
+	.clk(clk_cpu), .data(midi_data), .wr(midi_wr), .overflow(), .tx(MIDI_TX)
 );
 
 //--------- ESP8266 UART -------
-esp8266 esp8266(
-    .CLK                (clk_sys),
-    .RESET              (areset),
+esp8266 #(.CLKS_PER_BIT(651)) esp8266(    // 75 MHz / 115200
+    .CLK                (clk_cpu),
+    .RESET              (reset_cpu),
 
     .ESP_UART_RX_DATA   (esp_uart_rx_data),
     .ESP_UART_RX_WR     (esp_uart_rx_wr),
@@ -368,22 +410,64 @@ esp8266 esp8266(
     .UART_CTS           (UART_CTS)
 );
 
-//--------- VGA sync ---------
-wire vga_hs, vga_vs, vga_de;
-vga_sync vga_sync(
-    .clk                (clk_sys),
-    .hs                 (vga_hs),
-    .vs                 (vga_vs),
-    .de                 (vga_de)
+//--------- the menu computer ---------
+// menu_soc (docs/PLAN.md): VexRiscv, its program loaded from the ROMs of boot.kg into the SRAM, the frame buffers
+// in the SRAM; it clears the SRAM after the PLL lock (every core starts with clean memory)
+wire vid_req, vid_we, pal_we, fb_sel, fb_shown, frame_t, fb_show;
+wire [20:0] vid_adr;
+wire [8:0] vid_len, vid_wa;
+wire [15:0] vid_wd;
+wire [8:0] pal_wa;
+wire [27:0] pal_wd;
+wire [23:0] grad_top, grad_bot;
+wire [15:0] sram_do, sram_oe_n;
+
+menu_soc soc (
+    .clk(clk_cpu), .reset(reset_cpu),
+    .ld_kind(ld_kind), .ld_active(ld_active), .ld_end(ld_end), .ld_addr(ld_addr), .ld_data(ld_data),
+    .ld_wr(ld_wr), .ld_ready(ld_ready),
+    .kbd(kbd), .kbd_wr(kbd_wr), .ms_x(ms_x), .ms_y(ms_y), .ms_b(ms_b), .ms_wr(ms_wr), .joy_l(joy_l), .joy_r(joy_r),
+    .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
+    .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .fb_sel(fb_sel), .fb_shown(fb_shown),
+    .frame_t(frame_t), .show(fb_show), .grad_top(grad_top), .grad_bot(grad_bot),
+    .snd_out(snd_out), .snd_t(snd_t),
+    .midi_data(cpu_midi_data), .midi_wr(cpu_midi_wr), .midi_full(cpu_midi_full),
+    .esp_rx_data(esp_uart_rx_data), .esp_rx_valid(esp_uart_rx_wr && esp_own), .esp_rx_ack(cpu_esp_ack),
+    .esp_tx_data(cpu_esp_data), .esp_tx_wr(cpu_esp_wr), .esp_own(esp_own),
+    .rpc_a(rpc_a), .rpc_we(rpc_we), .rpc_wd(rpc_wd), .rpc_rd(rpc_rd),
+    .dbg_uart(), .dbg_uart_wr(), .cpu_run(),
+    .MA(MA), .MD_I(MD), .MD_O(sram_do), .MD_OE_N(sram_oe_n), .MWR_N(MWR_N), .MRD_N(MRD_N)
+);
+genvar gi;
+generate for (gi = 0; gi < 16; gi = gi + 1) begin : g_md
+    assign MD[gi] = sram_oe_n[gi] ? 1'bz : sram_do[gi];
+end endgenerate
+
+//--------- video ---------
+// the frame buffer of the CPU (800 x 600, the timing of the old vga_sync), 4 clocks after its counters
+wire [27:0] fb_rgba;
+wire fb_on, vga_hs, vga_vs, vga_de;
+menu_video video (
+    .clk_cpu(clk_cpu),
+    .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
+    .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .show(fb_show), .fb_sel(fb_sel), .fb_shown(fb_shown),
+    .frame_t(frame_t),
+    .clk_pix(clk_sys), .rgba(fb_rgba), .show_o(fb_on), .hs(vga_hs), .vs(vga_vs), .de(vga_de)
 );
 
 //--------- background ---------
-// the glow of the FT812 menu behind the OSD (menu_bg: a gradient that breathes and drifts in tint),
-// one clock behind vga_sync with its syncs
-wire [23:0] bg_rgb;
-wire bg_hs, bg_vs, bg_de;
+// the glow of the old menu (menu_bg: a gradient that breathes and drifts in tint, one clock behind its syncs)
+// while the CPU shows nothing; else the FT812 gradient of menu_compose, the frame buffer blended over it
+wire [23:0] glow_rgb;
 menu_bg background(
     .clk(clk_sys), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
+    .rgb_o(glow_rgb), .hs_o(), .vs_o(), .de_o()
+);
+wire [23:0] bg_rgb;
+wire bg_hs, bg_vs, bg_de;
+menu_compose compose(
+    .clk(clk_sys), .rgba_i(fb_rgba), .show_i(fb_on), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
+    .glow_i(glow_rgb), .grad_top(grad_top), .grad_bot(grad_bot),
     .rgb_o(bg_rgb), .hs_o(bg_hs), .vs_o(bg_vs), .de_o(bg_de)
 );
 
@@ -391,7 +475,7 @@ menu_bg background(
 // the screen of the menu is the bitmap OSD over the background, scale 2 (512 x 256 of 800 x 600);
 // HDMI takes the syncs as they come out of the overlay (2 clocks later)
 kg_l2_osd_overlay #(.SCALE(2)) overlay(
-    .wclk(clk_sys), .osd_wr(osd_wr), .osd_waddr(osd_waddr), .osd_wdata(osd_wdata), .osd_en(osd_en),
+    .wclk(clk_cpu), .osd_wr(osd_wr), .osd_waddr(osd_waddr), .osd_wdata(osd_wdata), .osd_en(osd_en),
     .osd_fg(osd_fg), .osd_bg(osd_bg), .osd_alpha(osd_alpha), .osd_px(osd_px), .osd_py(osd_py),
     .osd_pw(osd_pw), .osd_ph(osd_ph), .osd_place(osd_place), .osd_zoom(osd_zoom),
     .clk(clk_sys), .rgb_i(bg_rgb), .hs_i(bg_hs), .vs_i(bg_vs), .de_i(bg_de),
