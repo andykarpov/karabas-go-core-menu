@@ -3,24 +3,31 @@
 #include "mmio.h"
 
 static volatile uint8_t *fb = FB0;
-static int next_entry = 1;       // 0 is transparent
+static int bank = 0;             // the frame buffer drawn into = the palette bank its colours go to
 
-void gfx_init(void) { gfx_reset_palette(); fb = FB0; }
-void gfx_target(int buffer) { fb = buffer ? FB1 : FB0; }
-void gfx_reset_palette(void) { next_entry = 1; R_PAL(0) = 0; }
+// the palette of each buffer: entries handed out as they are asked for, a colour (or a ramp) once
+#define CACHE_MAX 40
+typedef struct { uint32_t fg; int32_t surface; uint8_t first; } cached_t;   // surface: GFX_ALPHA, GFX_SOLID or a colour
+static struct { int next; int n; cached_t c[CACHE_MAX]; } pal[2];
+
+#ifdef GFX_DEBUG_PUTS
+void GFX_DEBUG_PUTS(const char *s);
+#endif
+
+void gfx_init(void) { gfx_target(0); gfx_reset_palette(); gfx_target(1); gfx_reset_palette(); gfx_target(0); }
+void gfx_target(int buffer) { bank = buffer ? 1 : 0; fb = bank ? FB1 : FB0; }
+int gfx_target_buffer(void) { return bank; }
+void gfx_reset_palette(void) { pal[bank].next = 1; pal[bank].n = 0; R_PAL(bank, 0) = 0; }
 
 static uint8_t new_entry(uint32_t argb) {
-  if (next_entry > 255) return 255;
-  R_PAL(next_entry) = argb;
-  return (uint8_t) next_entry++;
-}
-
-uint8_t gfx_color(uint32_t rgb) { return new_entry(0xF0000000u | (rgb & 0xFFFFFF)); }
-
-ramp_t gfx_ramp_alpha(uint32_t rgb) {
-  ramp_t r = (ramp_t) next_entry;
-  for (uint32_t k = 1; k <= 15; k++) new_entry((k << 28) | (rgb & 0xFFFFFF));
-  return r;
+  if (pal[bank].next > 255) {
+#ifdef GFX_DEBUG_PUTS
+    GFX_DEBUG_PUTS("gfx: the palette is full\n");
+#endif
+    return 255;
+  }
+  R_PAL(bank, pal[bank].next) = argb;
+  return (uint8_t) pal[bank].next++;
 }
 
 static uint32_t mix(uint32_t fg, uint32_t bg, uint32_t k) {  // k / 15 of fg
@@ -32,11 +39,22 @@ static uint32_t mix(uint32_t fg, uint32_t bg, uint32_t k) {  // k / 15 of fg
   return out;
 }
 
-ramp_t gfx_ramp_over(uint32_t fg, uint32_t bg) {
-  ramp_t r = (ramp_t) next_entry;
-  for (uint32_t k = 1; k <= 15; k++) new_entry(0xF0000000u | mix(fg, bg, k));
-  return r;
+static uint8_t lookup(uint32_t fg, int32_t surface) {
+  fg &= 0xFFFFFF;
+  for (int i = 0; i < pal[bank].n; i++)
+    if (pal[bank].c[i].fg == fg && pal[bank].c[i].surface == surface) return pal[bank].c[i].first;
+  uint8_t first = (uint8_t) pal[bank].next;
+  if (surface == GFX_SOLID) new_entry(0xF0000000u | fg);
+  else for (uint32_t k = 1; k <= 15; k++)
+    new_entry(surface == GFX_ALPHA ? (k << 28) | fg : 0xF0000000u | mix(fg, (uint32_t) surface, k));
+  if (pal[bank].n < CACHE_MAX) pal[bank].c[pal[bank].n++] = (cached_t) { fg, surface, first };
+  return first;
 }
+
+uint8_t gfx_color(uint32_t rgb) { return lookup(rgb, GFX_SOLID); }
+ramp_t gfx_ramp_alpha(uint32_t rgb) { return lookup(rgb, GFX_ALPHA); }
+ramp_t gfx_ramp_over(uint32_t fg, uint32_t bg) { return lookup(fg, (int32_t) (bg & 0xFFFFFF)); }
+ramp_t gfx_ramp(uint32_t fg, int32_t surface) { return surface == GFX_ALPHA ? gfx_ramp_alpha(fg) : gfx_ramp_over(fg, (uint32_t) surface); }
 
 static inline void pset(int x, int y, uint8_t c) {
   if ((unsigned) x < FB_W && (unsigned) y < FB_H) fb[y * FB_W + x] = c;
@@ -200,6 +218,8 @@ static uint8_t under[SPR_MAX_W * SPR_MAX_H];
 static int spr_x, spr_y, spr_w, spr_h, spr_on = 0;
 static const char *const *spr_art;
 
+void gfx_sprite_forget(void) { spr_on = 0; }
+
 void gfx_sprite_hide(void) {
   if (!spr_on) return;
   for (int j = 0; j < spr_h; j++)
@@ -220,4 +240,25 @@ void gfx_sprite_show(int x, int y, const char *const *art, int w, int h, uint8_t
       pset(px, py, c == 'X' ? c_dark : c_light);
     }
   spr_on = 1;
+}
+
+// ---- shapes of the widgets ----
+
+void gfx_pill(int x0, int x1, int cy, int r, ramp_t ramp) {
+  gfx_round_rect(x0 - r, cy - r, x1 - x0 + 2 * r, 2 * r, r, ramp);
+}
+
+void gfx_solid_rect(int x, int y, int w, int h, uint8_t idx) {
+  // a solid colour (one entry) with the corner pixels cut: the swatches of the colours
+  gfx_fill(x + 1, y, w - 2, 1, idx);
+  gfx_fill(x, y + 1, w, h - 2, idx);
+  gfx_fill(x + 1, y + h - 1, w - 2, 1, idx);
+}
+
+void gfx_text_right(const font_t *f, int rx, int cy, const char *s, ramp_t ramp) {
+  gfx_text(f, rx - gfx_text_width(f, s), cy - f->line / 2, s, ramp);
+}
+
+void gfx_text_left(const font_t *f, int x, int cy, const char *s, ramp_t ramp) {
+  gfx_text(f, x, cy - f->line / 2, s, ramp);
 }

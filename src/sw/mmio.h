@@ -2,7 +2,14 @@
 #pragma once
 #include <stdint.h>
 
+#ifdef HOST
+// the host build of the drawing (host/): the registers and the frame buffers are arrays there
+volatile uint32_t *host_reg(uint32_t off);
+extern uint8_t host_fb[2][0x80000];
+#define MMIO(off) (*host_reg(off))
+#else
 #define MMIO(off) (*(volatile uint32_t *) (0x80000000u + (off)))
+#endif
 #define R_DBG    MMIO(0x00) // W: a byte of the debug console
 #define R_FB     MMIO(0x04) // W: bit 0 the buffer to show from the next frame; R: the one shown
 #define R_FRAMES MMIO(0x08) // R: frames begun
@@ -19,7 +26,8 @@
 #define R_MOUSE  MMIO(0x34) // R: buttons 31..24, dy 23..12, dx 11..0 (reading clears)
 #define R_JOY    MMIO(0x38) // R: { joy_r, joy_l }
 #define R_US     MMIO(0x40) // R: microseconds since the start
-#define R_PAL(i) MMIO(0x400 + 4 * (i)) // W: 0xARRGGBB, alpha 0..15 (0 transparent, 15 opaque)
+#define R_PAL(b, i) MMIO(0x400 + 0x400 * (b) + 4 * (i)) // W: entry i of the palette of frame buffer b:
+                                                     // 0xARRGGBB, alpha 0..15 (0 transparent, 15 opaque)
 
 // the mailbox of kg_l2_rpc: byte k at 0x80002000 + 4 k (low byte of a word)
 #define RPC(k)   MMIO(0x2000 + 4 * (k))
@@ -39,5 +47,10 @@
 
 #define FB_W 800
 #define FB_H 600
+#ifdef HOST
+#define FB0 ((volatile uint8_t *) host_fb[0])
+#define FB1 ((volatile uint8_t *) host_fb[1])
+#else
 #define FB0 ((volatile uint8_t *) 0x300000)
 #define FB1 ((volatile uint8_t *) 0x380000)
+#endif

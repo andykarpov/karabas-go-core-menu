@@ -5,7 +5,7 @@
 
  The picture of the menu CPU: 800 x 600 at 60 Hz (the timing of vga_sync, clk_pix 40.91 MHz), a colour
  index per pixel from one of the two frame buffers in the SRAM (FB0_HW / FB1_HW, halfword addresses;
- two pixels a halfword, the even pixel in the low byte), through the palette (256 x { alpha 4, RGB 24 }:
+ two pixels a halfword, the even pixel in the low byte), through the palette of that buffer (two banks of 256 x { alpha 4, RGB 24 }, bank = buffer:
  menu_compose blends it over the background). After
  doom_video.v of karabas-go-core-doom.
 
@@ -32,7 +32,7 @@ module menu_video #(
 	input wire [8:0] vid_wa,
 	input wire [15:0] vid_wd,
 	input wire pal_we,
-	input wire [7:0] pal_wa,
+	input wire [8:0] pal_wa,               // { bank, entry }: bank = the frame buffer it is for
 	input wire [27:0] pal_wd,
 	input wire show,                       // clk_cpu
 	input wire fb_sel,                     // clk_cpu
@@ -108,8 +108,8 @@ kg_sdpram #(.DW(16), .AW(10)) linebuf (
 );
 
 wire [27:0] pal_q;
-reg [7:0] pal_ra = 8'd0;
-kg_sdpram #(.DW(28), .AW(8)) palette (
+reg [8:0] pal_ra = 9'd0;
+kg_sdpram #(.DW(28), .AW(9)) palette (
 	.clka(clk_cpu), .wea(pal_we), .addra(pal_wa), .dina(pal_wd),
 	.clkb(clk_pix), .enb(1'b1), .addrb(pal_ra), .doutb(pal_q)
 );
@@ -127,7 +127,7 @@ reg [1:0] bsel = 2'd0;
 always @(posedge clk_pix) begin
 	lb_ra <= { v[0], h[9:1] };
 	bsel <= { bsel[0], h[0] };
-	pal_ra <= bsel[1] ? lb_q[15:8] : lb_q[7:0];
+	pal_ra <= { shown_p, bsel[1] ? lb_q[15:8] : lb_q[7:0] };   // the palette of the buffer shown
 	vis <= { vis[2:0], vis0 };
 	hsd <= { hsd[2:0], h > H_SYNC_ON && h <= H_SYNC_OFF };
 	vsd <= { vsd[2:0], v > V_SYNC_ON && v <= V_SYNC_OFF };

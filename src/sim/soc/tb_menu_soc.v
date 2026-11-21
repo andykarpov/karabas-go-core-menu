@@ -53,7 +53,7 @@ wire vid_req, vid_we, pal_we, fb_sel, fb_shown, frame_t, show;
 wire [20:0] vid_adr;
 wire [8:0] vid_len, vid_wa;
 wire [15:0] vid_wd;
-wire [7:0] pal_wa;
+wire [8:0] pal_wa;
 wire [27:0] pal_wd;
 wire [23:0] grad_top, grad_bot, glow;
 wire [27:0] rgba;

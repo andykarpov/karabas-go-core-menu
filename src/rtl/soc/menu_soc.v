@@ -34,7 +34,7 @@
                  R playing), channel 1 at 0x90
      a0 W  MIDI: a byte to the SAM2695 (menu_midi_mux, whole messages with their status); R bit 0
            its fifo is full
-     400..7fc W  PAL: palette entry ((a - 400) / 4) = 0xARRGGBB: alpha 0..15 in bits 31..28 over the
+     400..bfc W  PAL: bank (a - 400) / 1024 (the palette of frame buffer 0 / 1), entry ((a - 400) / 4) % 256 = 0xARRGGBB: alpha 0..15 in bits 31..28 over the
                  background (0 transparent, 15 opaque)
      2000..3ffc  RPC: byte (a - 2000) / 4 of the mailbox of kg_l2_rpc (kg_mcu2 RPC_*), in the low byte
                  of a word (map in kg_l2_rpc.v: request 000.., response 200.., event 400.., registers 600..)
@@ -82,7 +82,7 @@ module menu_soc #(
 	output wire [8:0] vid_wa,
 	output wire [15:0] vid_wd,
 	output reg pal_we = 1'b0,
-	output reg [7:0] pal_wa = 8'd0,
+	output reg [8:0] pal_wa = 9'd0,     // { bank, entry }
 	output reg [27:0] pal_wd = 28'd0,
 	output reg [23:0] grad_top = 24'h0000C8,  // the FT812 defaults of the firmware
 	output reg [23:0] grad_bot = 24'h000000,
@@ -350,9 +350,9 @@ always @(posedge clk) begin
 	end else if (d_req && d_io && !io_ack && !rpc_rd_wait && !rpc_rd_wait2 && !cpu_reset && !io_rpc) begin
 		io_ack <= 1'b1;
 		if (d_we) begin
-			if (io_off[11:10] == 2'b01) begin   // 0x400..0x7fc
+			if (io_off[11:10] == 2'b01 || io_off[11:10] == 2'b10) begin   // 0x400..0xbfc
 				pal_we <= 1'b1;
-				pal_wa <= io_off[9:2];
+				pal_wa <= { io_off[11], io_off[9:2] };
 				pal_wd <= { d_dat_o[31:28], d_dat_o[23:0] };
 			end else if (io_off[7:5] == 3'b100) begin   // 0x80..0x9c: the sound
 				snd_wr <= 1'b1;

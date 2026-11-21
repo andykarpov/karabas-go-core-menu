@@ -239,6 +239,8 @@ int main(int argc, char **argv) {
   uint64_t n = 0, limit = 60000000;
   int phase = 0; // 0 until the list is drawn, 1 Down pressed, 2 released, 3 Enter, 4 launched
   uint64_t t_phase = 0;
+  bool setup_done = false;
+  std::vector<uint32_t> setup_frame;
   while (n < limit && phase != 5) {
     if (t->l_irq) serve();
     cpu_clocks(200); n += 200;
@@ -260,7 +262,19 @@ int main(int argc, char **argv) {
         clicks++; t_phase = n; printf("tb_menu_soc: click %d at %llu\n", clicks, (unsigned long long) n);
       } else phase = 4;
     }
-    else if (phase == 1 && !getenv("TB_MOUSE") && n - t_phase > 300000) { t->kbd = (uint64_t) 0x51 << 8; phase = 2; t_phase = n; }        // Down
+    // TB_SETUP: S opens Setup (drawn into the other buffer, its own palette), a frame of it, Esc back
+    // to the list (drawn again), then on as the key run
+    else if (phase == 1 && getenv("TB_SETUP") && !setup_done && n - t_phase > 300000) { t->kbd = (uint64_t) 0x16 << 8; phase = 7; t_phase = n; }
+    else if (phase == 7 && n - t_phase > 600000) { t->kbd = 0; phase = 8; t_phase = n; }
+    else if (phase == 8 && console.find("menu: setup drawn") != std::string::npos) { cap_state = 1; phase = 9; t_phase = n; }
+    else if (phase == 9 && cap_state == 3) {
+      setup_frame = frame;
+      cap_state = 0;
+      t->kbd = (uint64_t) 0x29 << 8; phase = 10; t_phase = n;   // Esc
+    }
+    else if (phase == 10 && n - t_phase > 600000) { t->kbd = 0; phase = 11; }
+    else if (phase == 11 && console.find("menu: list drawn") != console.rfind("menu: list drawn")) { setup_done = true; phase = 1; t_phase = n; }
+    else if (phase == 1 && !getenv("TB_MOUSE") && (!getenv("TB_SETUP") || setup_done) && n - t_phase > 300000) { t->kbd = (uint64_t) 0x51 << 8; phase = 2; t_phase = n; }        // Down
     else if (phase == 2 && n - t_phase > 600000) { t->kbd = 0; phase = 3; t_phase = n; cap_state = 1; }
     else if (phase == 3 && cap_state == 3 && n - t_phase > 600000) { t->kbd = (uint64_t) 0x28 << 8; phase = 4; t_phase = n; } // Enter
     else if (phase == 4 && !launched.empty()) phase = 5;
@@ -287,6 +301,17 @@ int main(int argc, char **argv) {
     if (b2 != 0x0000c8) { printf("tb_menu_soc: the second button is not active (%06x)\n", b2); errors++; }
     if (b1 != 0x202026) { printf("tb_menu_soc: the first button is not a button (%06x)\n", b1); errors++; }
     printf("tb_menu_soc: frame.ppm, %d white, %d selection pixels\n", white, selc);
+  }
+  if (getenv("TB_SETUP")) {
+    // the System section chosen and lit (the active colour), Autoload a button: a pixel left of the text
+    uint32_t s1 = setup_frame.size() == 800 * 600 ? setup_frame[(88 + 16) * 800 + 24] : 0;
+    uint32_t s2 = setup_frame.size() == 800 * 600 ? setup_frame[(128 + 16) * 800 + 24] : 0;
+    printf("tb_menu_soc: Setup frame, System %06x, Autoload %06x\n", s1, s2);
+    if (s1 != 0x0000c8 || s2 != 0x202026) { printf("tb_menu_soc: Setup is not drawn\n"); errors++; }
+    FILE *o = fopen("frame_setup.ppm", "wb");
+    fprintf(o, "P6 800 600 255\n");
+    for (uint32_t p : setup_frame) { fputc(p >> 16, o); fputc((p >> 8) & 255, o); fputc(p & 255, o); }
+    fclose(o);
   }
   const char *want = getenv("TB_MOUSE") ? "d.kg" : "b.kg";  // the pointer is on the fourth core
   // the click of Down / the mouse: Cowbell on channel 10, on and off

@@ -1,7 +1,7 @@
 # The program of the menu CPU (rtl/soc/menu_soc.v): menu.bin is the ROM of boot.kg (core.json roms).
 XPACK  ?= $(HOME)/opt/xpack-riscv-none-elf-gcc-15.2.0-1/bin
 CROSS  := $(XPACK)/riscv-none-elf-
-CFLAGS := -march=rv32im -mabi=ilp32 -O2 -g -ffreestanding -fno-builtin -ffunction-sections -fdata-sections -Wall
+CFLAGS := -march=rv32im -mabi=ilp32 -O2 -g -ffreestanding -fno-builtin -ffunction-sections -fdata-sections -fno-tree-loop-distribute-patterns -Wall
 B      := build
 
 all: ../roms/menu.bin
@@ -11,12 +11,14 @@ all: ../roms/menu.bin
 	mkdir -p ../roms
 	cp $< $@
 
-$(B)/%.o: %.c mmio.h rpc.h gfx.h font.h fonts_gen.h images_gen.h sound.h sounds_gen.h | $(B)
+$(B)/%.o: %.c $(wildcard *.h) | $(B)
 	$(CROSS)gcc $(CFLAGS) -c $< -o $@
 $(B)/%.o: %.S | $(B)
 	$(CROSS)gcc $(CFLAGS) -c $< -o $@
-$(B)/menu.elf: $(B)/crt0.o $(B)/main.o $(B)/rpc.o $(B)/gfx.o $(B)/sound.o link.ld
-	$(CROSS)gcc $(CFLAGS) -nostdlib -nostartfiles -T link.ld -Wl,--gc-sections -o $@ $(B)/crt0.o $(B)/main.o $(B)/rpc.o $(B)/gfx.o $(B)/sound.o -lgcc
+SRCS   := main.c ui.c fonts.c settings.c browser.c setup.c rpc.c gfx.c sound.c
+OBJS   := $(B)/crt0.o $(addprefix $(B)/,$(SRCS:.c=.o))
+$(B)/menu.elf: $(OBJS) link.ld
+	$(CROSS)gcc $(CFLAGS) -nostdlib -nostartfiles -T link.ld -Wl,--gc-sections -o $@ $(OBJS) -lgcc
 	$(CROSS)size $@
 $(B)/menu.bin: $(B)/menu.elf
 	$(CROSS)objcopy -O binary $< $@

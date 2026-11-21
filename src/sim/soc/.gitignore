@@ -4,3 +4,4 @@ frame.ppm
 frame_mouse.ppm
 frame_sound.ppm
 sound_out.raw
+frame*.ppm
