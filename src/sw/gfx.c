@@ -56,8 +56,22 @@ ramp_t gfx_ramp_alpha(uint32_t rgb) { return lookup(rgb, GFX_ALPHA); }
 ramp_t gfx_ramp_over(uint32_t fg, uint32_t bg) { return lookup(fg, (int32_t) (bg & 0xFFFFFF)); }
 ramp_t gfx_ramp(uint32_t fg, int32_t surface) { return surface == GFX_ALPHA ? gfx_ramp_alpha(fg) : gfx_ramp_over(fg, (uint32_t) surface); }
 
+// a rectangle left as it is (gfx_keep): a redraw around a button does not blink its text
+static int keep_on = 0, keep_x0, keep_y0, keep_x1, keep_y1;
+void gfx_keep(int x, int y, int w, int h) { keep_on = 1; keep_x0 = x; keep_y0 = y; keep_x1 = x + w; keep_y1 = y + h; }
+void gfx_keep_off(void) { keep_on = 0; }
+
 static inline void pset(int x, int y, uint8_t c) {
+  if (keep_on && x >= keep_x0 && x < keep_x1 && y >= keep_y0 && y < keep_y1) return;
   if ((unsigned) x < FB_W && (unsigned) y < FB_H) fb[y * FB_W + x] = c;
+}
+
+static void span(volatile uint8_t *p, int w, uint8_t c) {
+  uint32_t c4 = c * 0x01010101u;
+  int i = 0;
+  for (; i < w && ((uintptr_t) (p + i) & 3); i++) p[i] = c;
+  for (; i + 4 <= w; i += 4) *(volatile uint32_t *) (p + i) = c4;
+  for (; i < w; i++) p[i] = c;
 }
 
 void gfx_fill(int x, int y, int w, int h, uint8_t c) {
@@ -66,13 +80,14 @@ void gfx_fill(int x, int y, int w, int h, uint8_t c) {
   if (x + w > FB_W) w = FB_W - x;
   if (y + h > FB_H) h = FB_H - y;
   if (w <= 0 || h <= 0) return;
-  uint32_t c4 = c * 0x01010101u;
   for (int j = 0; j < h; j++) {
     volatile uint8_t *p = fb + (y + j) * FB_W + x;
-    int i = 0;
-    for (; i < w && ((uintptr_t) (p + i) & 3); i++) p[i] = c;
-    for (; i + 4 <= w; i += 4) *(volatile uint32_t *) (p + i) = c4;
-    for (; i < w; i++) p[i] = c;
+    int yy = y + j;
+    if (keep_on && yy >= keep_y0 && yy < keep_y1 && x < keep_x1 && x + w > keep_x0) {
+      int a = keep_x0 - x, b = x + w - keep_x1;     // the parts left and right of the kept one
+      if (a > 0) span(p, a, c);
+      if (b > 0) span(p + (keep_x1 - x), b, c);
+    } else span(p, w, c);
   }
 }
 

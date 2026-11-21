@@ -314,7 +314,12 @@ int main(int argc, char **argv) {
     }
     else if (phase == 10 && n - t_phase > 600000) { t->kbd = 0; phase = 11; }
     else if (phase == 11 && console.find("menu: list drawn") != console.rfind("menu: list drawn")) { setup_done = true; phase = 1; t_phase = n; }
-    else if (phase == 1 && !getenv("TB_MOUSE") && (!getenv("TB_SETUP") || setup_done) && n - t_phase > 300000) { t->kbd = (uint64_t) 0x51 << 8; phase = 2; t_phase = n; }        // Down
+    else if (phase == 1 && !getenv("TB_MOUSE") && (!getenv("TB_SETUP") || setup_done) && n - t_phase > 300000) {
+      // Down, or (TB_WHEEL) a notch of the wheel towards the user: the same move
+      if (getenv("TB_WHEEL")) { t->ms_x = 0; t->ms_y = 0; t->ms_z = 0xFF; t->ms_b = 0; t->ms_wr = 1; cpu_clock(); t->ms_wr = 0; t->ms_z = 0; }
+      else t->kbd = (uint64_t) 0x51 << 8;
+      phase = 2; t_phase = n;
+    }
     else if (phase == 2 && n - t_phase > 600000) { t->kbd = 0; phase = 3; t_phase = n; cap_state = 1; }
     else if (phase == 3 && cap_state == 3 && n - t_phase > 600000) { t->kbd = (uint64_t) 0x28 << 8; phase = 4; t_phase = n; } // Enter
     else if (phase == 4 && !launched.empty()) phase = 5;

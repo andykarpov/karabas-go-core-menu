@@ -14,6 +14,9 @@ verilator --cc --exe --build -O2 -j 4 -Wno-fatal -Wno-WIDTH -Wno-UNUSED -Wno-PIN
 # the mouse: the pointer onto the fourth core, two quick clicks start it (buttons latched until read)
 echo "tb_menu_soc: the mouse run"
 TB_MOUSE=1 TB_FRAME=frame_mouse.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|launch"
+# the wheel: a notch towards the user moves the focus down as the Down key, Enter starts b.kg
+echo "tb_menu_soc: the wheel run"
+TB_WHEEL=1 TB_FRAME=frame_wheel.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|launch"
 # the start sound of [ft812] sound after Enter: PCM out of menu_sound
 echo "tb_menu_soc: the sound run"
 TB_SOUND=1 TB_FRAME=frame_sound.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|sound"

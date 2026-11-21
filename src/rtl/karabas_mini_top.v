@@ -312,7 +312,7 @@ assign MCU_IO[3:2] = 2'bzz;
 // HID and the loader of kg_mcu2 for menu_soc
 wire [55:0] kbd;
 wire kbd_wr, ms_wr;
-wire [7:0] ms_x, ms_y, ms_b;
+wire [7:0] ms_x, ms_y, ms_z, ms_b;
 wire [15:0] joy_l, joy_r;
 wire [1:0] ld_kind;
 wire ld_active, ld_end, ld_wr, ld_ready;
@@ -363,7 +363,7 @@ kg_mcu2 #(
 
     .SW(), .SW_WR(), .SW_INDEX(), .SW_VALUE(), .HW_ID(), .DVI_ONLY(dvi_only), .CORE_BUILD(), .FW_BUILD(),
     .BUSY(), .BTNS(), .RELOAD_REQ(1'b0), .RELOAD_CORE(8'd0),
-    .KBD(kbd), .KBD_WR(kbd_wr), .PS2_CODE(), .PS2_KIND(), .PS2_WR(), .MS_X(ms_x), .MS_Y(ms_y), .MS_Z(),
+    .KBD(kbd), .KBD_WR(kbd_wr), .PS2_CODE(), .PS2_KIND(), .PS2_WR(), .MS_X(ms_x), .MS_Y(ms_y), .MS_Z(ms_z),
     .MS_B(ms_b), .MS_WR(ms_wr), .JOY_L(joy_l), .JOY_R(joy_r), .JOY_WR(), .PS2_CMD(16'h0000), .PS2_CMD_WR(1'b0),
     .LD_KIND(ld_kind), .LD_SLOT(), .LD_SIZE(), .LD_START(), .LD_ACTIVE(ld_active), .LD_END(ld_end),
     .LD_ADDR(ld_addr), .LD_DATA(ld_data), .LD_WR(ld_wr), .LD_READY(ld_ready),
@@ -426,7 +426,7 @@ menu_soc soc (
     .clk(clk_cpu), .reset(reset_cpu),
     .ld_kind(ld_kind), .ld_active(ld_active), .ld_end(ld_end), .ld_addr(ld_addr), .ld_data(ld_data),
     .ld_wr(ld_wr), .ld_ready(ld_ready),
-    .kbd(kbd), .kbd_wr(kbd_wr), .ms_x(ms_x), .ms_y(ms_y), .ms_b(ms_b), .ms_wr(ms_wr), .joy_l(joy_l), .joy_r(joy_r),
+    .kbd(kbd), .kbd_wr(kbd_wr), .ms_x(ms_x), .ms_y(ms_y), .ms_z(ms_z), .ms_b(ms_b), .ms_wr(ms_wr), .joy_l(joy_l), .joy_r(joy_r),
     .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
     .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .fb_sel(fb_sel), .fb_shown(fb_shown),
     .frame_t(frame_t), .show(fb_show), .grad_top(grad_top), .grad_bot(grad_bot),

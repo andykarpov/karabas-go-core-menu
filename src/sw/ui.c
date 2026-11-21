@@ -231,6 +231,9 @@ int mouse_next(void) {
     else ev |= ((pressed & 1) ? M_LEFT : 0) | ((pressed & 2) ? M_RIGHT : 0);
   }
   if (ptr.visible && R_MS - m_idle > 5000) { ptr.visible = 0; ev |= M_MOVED; }
+  // the wheel moves the focus as Up / Down (a notch a key)
+  int dz = (int) (R_WHEEL << 20) >> 20;
+  for (int n = 0; n < 4 && dz; n++) { push(dz > 0 ? K_UP : K_DOWN, 0, 0, 0); dz += dz > 0 ? -1 : 1; }
   return ev;
 }
 

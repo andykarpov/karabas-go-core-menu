@@ -77,6 +77,8 @@ static const char *core_list[][3] = {   // file, name, id
   { "alf.kg", "Alf", "alf" }, { "cpc.kg", "Amstrad CPC", "cpc" }, { "apple2.kg", "Apple //e", "apple2" },
   { "a2600.kg", "Atari 2600", "a2600" }, { "a800.kg", "Atari 800XL", "a800" }, { "atarist.kg", "Atari ST", "atarist" },
   { "bbc.kg", "BBC Micro", "bbc" }, { "bk.kg", "BK-0011M", "bk" }, { "pro.kg", "Karabas Pro +", "pro" },
+  { "c64.kg", "Commodore 64", "c64" }, { "msx.kg", "MSX", "msx" }, { "nes.kg", "NES", "nes" },
+  { "sega.kg", "Sega Mega Drive", "sega" }, { "vic20.kg", "VIC-20", "vic20" }, { "zxuno.kg", "ZX-Uno", "zxuno" },
 };
 #define NCORES ((int) (sizeof(core_list) / sizeof(core_list[0])))
 
@@ -204,6 +206,27 @@ int main(int argc, char **argv) {
   browser_start();
   msc_mode = 1; browser_msc_draw();              dump("00a_msc"); msc_mode = 0;
   browser_open();                                dump("00_browser");
+  // the mouse on the list: a hover on and off leaves the screen as it was (no traces), the pager by clicks
+  {
+    static uint8_t snap[0x80000];
+    int b = regs[0x04 / 4] & 1, bad = 0;
+    ptr.visible = 1; ptr.x = 700; ptr.y = 300; browser_mouse(M_MOVED);
+    memcpy(snap, host_fb[b], sizeof(snap));
+    const int at[4][2] = { { 300, 88 + 40 + 10 }, { 36, 104 }, { 480, 560 }, { 320, 560 } };
+    const char *names[4] = { "00d_hover_core", "00e_hover_setup", "00f_hover_next", "00g_hover_prev" };
+    for (int i = 0; i < 4; i++) {
+      ptr.x = at[i][0]; ptr.y = at[i][1]; browser_mouse(M_MOVED); dump(names[i]);
+      ptr.x = 700; ptr.y = 300; browser_mouse(M_MOVED);
+      int d = 0;
+      for (int k = 0; k < (int) sizeof(snap); k++) d += snap[k] != host_fb[b][k];
+      if (d) { printf("host: %s left %d pixels changed\n", names[i], d); bad++; }
+    }
+    printf("host: hover traces: %s\n", bad ? "BAD" : "none");
+    ptr.x = 480; ptr.y = 560; browser_mouse(M_LEFT);  dump("00h_click_next");
+    browser_mouse(M_LEFT);                            dump("00i_click_next_last");
+    ptr.x = 320; browser_mouse(M_LEFT);               dump("00j_click_prev");
+    ptr.x = 700; ptr.y = 300; browser_mouse(M_MOVED); ptr.visible = 0; browser_mouse(M_MOVED);
+  }
   keys("l");                                     dump("00b_setup_focus");   // Left on the first core
   keys("r");                                     dump("00c_setup_unfocus");
   keys("le");                                    dump("01_tabs_system");    // Enter on the Setup button

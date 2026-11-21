@@ -23,6 +23,8 @@ ramp_t gfx_ramp_alpha(uint32_t rgb);
 ramp_t gfx_ramp_over(uint32_t fg, uint32_t bg);
 uint8_t gfx_color(uint32_t rgb); // one opaque entry
 
+void gfx_keep(int x, int y, int w, int h);                  // nothing drawn inside it until gfx_keep_off
+void gfx_keep_off(void);
 void gfx_clear(int x, int y, int w, int h);                 // transparent: the background shows
 void gfx_fill(int x, int y, int w, int h, uint8_t idx);
 void gfx_round_rect(int x, int y, int w, int h, int r, ramp_t ramp);

@@ -26,6 +26,7 @@ extern uint8_t host_fb[2][0x80000];
 #define R_KBD1   MMIO(0x2c) // R: { 0, key 6, key 5, key 4 }
 #define R_KBDN   MMIO(0x30) // R: keyboard reports seen
 #define R_MOUSE  MMIO(0x34) // R: buttons 31..24, dy 23..12, dx 11..0 (reading clears)
+#define R_WHEEL  MMIO(0x3c) // R: the wheel sum 11..0, + away from the user (reading clears)
 #define R_JOY    MMIO(0x38) // R: { joy_r, joy_l }
 #define R_US     MMIO(0x40) // R: microseconds since the start
 #define R_PAL(b, i) MMIO(0x400 + 0x400 * (b) + 4 * (i)) // W: entry i of the palette of frame buffer b:

@@ -28,6 +28,7 @@
      34 R  MOUSE: bits 31..24 buttons (held now, or pressed since the last read: a click of press and
            release between two reads is not lost), 23..12 dy sum, 11..0 dx sum (signed, saturated;
            reading clears)
+     3c R  WHEEL: bits 11..0 the wheel sum (signed, saturated; + = away from the user; reading clears)
      38 R  JOY: { joy_r, joy_l }
      40 R  US: microseconds since the CPU started
      80..9c      SOUND: the two channels of menu_sound (+0 address, +4 length, +8 step, +c control /
@@ -72,6 +73,7 @@ module menu_soc #(
 	input wire kbd_wr,
 	input wire [7:0] ms_x,
 	input wire [7:0] ms_y,
+	input wire [7:0] ms_z,
 	input wire [7:0] ms_b,
 	input wire ms_wr,
 	input wire [15:0] joy_l,
@@ -278,7 +280,7 @@ reg [6:0] us_div = 7'd0;
 reg [31:0] kbd_n = 32'd0;
 reg [31:0] frames = 32'd0;
 reg frame_p = 1'b0;
-reg signed [11:0] ms_dx = 12'sd0, ms_dy = 12'sd0;
+reg signed [11:0] ms_dx = 12'sd0, ms_dy = 12'sd0, ms_dz = 12'sd0;
 reg [7:0] ms_btn = 8'd0;
 reg [7:0] ms_press = 8'd0;   // the buttons pressed since the last read
 reg io_ack = 1'b0;
@@ -344,6 +346,7 @@ always @(posedge clk) begin
 	if (ms_wr) begin
 		ms_dx <= sat_add(ms_dx, ms_x);
 		ms_dy <= sat_add(ms_dy, ms_y);
+		ms_dz <= sat_add(ms_dz, ms_z);
 		ms_btn <= ms_b;
 		ms_press <= ms_press | ms_b;
 	end
@@ -405,6 +408,10 @@ always @(posedge clk) begin
 					end
 				end
 				8'h38: io_dat <= { joy_r, joy_l };
+				8'h3c: begin
+					io_dat <= { {20{ms_dz[11]}}, ms_dz };
+					ms_dz <= ms_wr ? sat_add(12'sd0, ms_z) : 12'sd0;
+				end
 				8'h40: io_dat <= us;
 				8'h8c: io_dat <= { 23'd0, snd_playing[0], 8'd0 };
 				8'h9c: io_dat <= { 23'd0, snd_playing[1], 8'd0 };
