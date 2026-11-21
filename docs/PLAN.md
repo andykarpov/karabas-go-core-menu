@@ -152,6 +152,13 @@ works. To decide:
   the network, IP), a scan (3 networks); NTP sync set the RTC back from 12:00 to the right time in
   ~6 s. Not tried on the board: join, Forget, Upgrade / Reset module (the bench module stays joined).
 
+- Ф3 step 3 (cbe2f05, firmware 18df25f) Gamepad, on the board 2026-11-21: RPC HID (PADS, FORGET,
+  LEARN_START / STATE / DO, spec 5.9); the page lists the ports, Test shows both ports (pad presses
+  injected by AT, Up+A lit), Assign starts the learning in the firmware ("Press a button on the USB
+  pad"), Esc stops it. Not tried on the board: a whole learning and Save (no USB pad on the bench),
+  Forget. The HELLO of the core still lists SYS, CFG, CORES (RPC_SERVICES 16'h0007): add HID (bit 3)
+  at the next bitstream build (the firmware grants HID to a menu core anyway).
+
 ## Open items
 
 - The menu resolution: 800 x 600 now; the FT modes of `ft_height()` go away.
