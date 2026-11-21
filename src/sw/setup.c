@@ -12,6 +12,7 @@
 #include "browser.h"
 #include "cores.h"
 #include "ui.h"
+#include "sound.h"
 #include "mmio.h"
 #include "rpc.h"
 
@@ -317,6 +318,7 @@ static void change(int d) {
   int id = cur_id();
   if (settings[id].kind == SK_PAGE) { if (d > 0) { mx_page = 1; row = 0; } return; }
   settings_change(id, d);
+  if (id == S_SOUND) snd_start(set_val[S_SOUND]);   // heard as it is chosen (Off stops it)
 }
 
 static void enter_row(void) {

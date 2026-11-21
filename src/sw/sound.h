@@ -5,6 +5,7 @@
 #include "sounds_gen.h"
 
 void snd_play(int ch, const sound_t *s, uint8_t volume);
+void snd_start(int n);           // the start sound n (1..4) of [ft812] sound on channel 0; 0 stops it
 int snd_playing(int ch);
 void snd_stop(int ch);
 void midi_send(const uint8_t *msg, int len);   // a whole message with its status byte

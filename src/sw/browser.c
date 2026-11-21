@@ -99,16 +99,34 @@ static void draw_button(int i) {
   }
 }
 
+// the hover frame only: around the button, its middle (the text) kept, so it does not blink
+static void draw_hover(int i) {
+  int by = CORE_TOP + (i % PAGE) * CORE_STEP;
+  int on = i == sel && !setup_focus;
+  gfx_keep(BX + 6, by, BW - 12, BH);
+  gfx_clear(BX - 3, by - 3, BW + 6, BH + 6);
+  if (hover == i) gfx_round_rect(BX - 2, by - 2, BW + 4, BH + 4, 6, gfx_ramp_alpha(look.active));
+  gfx_round_rect(BX, by, BW, BH, 4, gfx_ramp_alpha(on ? look.active : look.button));
+  gfx_keep_off();
+}
+
+// the arrows of the pager: < at FB_W / 2 - 80, > at FB_W / 2 + 80
+static void draw_arrow(int next) {
+  int cx = FB_W / 2 + (next ? 80 : -80);
+  gfx_clear(cx - 16, FB_H - 54, 32, 28);
+  if (pages() > 1)
+    gfx_text_center(&f28, cx, FB_H - 40, next ? ">" : "<",
+                    hover == (next ? HIT_NEXT : HIT_PREV) ? gfx_ramp_alpha(look.text) : gfx_ramp_alpha(look.copyright));
+}
+
 static void draw_footer(void) {
   char b[48], *p;
   ramp_t copy = gfx_ramp_alpha(look.copyright);
   gfx_clear(240, FB_H - 56, 320, 52);
   p = str_cpy(b, "Page "); p = u2s(p, page_of(sel) + 1, 1); p = str_cpy(p, " of "); u2s(p, pages(), 1);
   gfx_text_center(&f27, FB_W / 2, FB_H - 40, b, copy);
-  if (pages() > 1) {
-    gfx_text_center(&f28, FB_W / 2 - 80, FB_H - 40, "<", hover == HIT_PREV ? gfx_ramp_alpha(look.text) : copy);
-    gfx_text_center(&f28, FB_W / 2 + 80, FB_H - 40, ">", hover == HIT_NEXT ? gfx_ramp_alpha(look.text) : copy);
-  }
+  draw_arrow(0);
+  draw_arrow(1);
   if (autoload_left >= 0) { p = str_cpy(b, "Autoloading core in "); p = u2s(p, autoload_left, 1); str_cpy(p, " s"); }
   else str_cpy(b, "Autoload disabled");
   gfx_text_center(&f27, FB_W / 2, FB_H - 20, b, copy);
@@ -125,11 +143,16 @@ static void draw_page(void) {
 }
 
 // Setup under the logo (a hover ring in the active colour)
-static void draw_setup(void) {
-  gfx_clear(14, 82, 40, 44);
-  if (hover == HIT_SETUP) gfx_circle(36, 104, 20, gfx_ramp_alpha(look.active));
+static void draw_setup_ring(void) {
   uint32_t c = setup_focus ? look.active : look.button;
+  gfx_clear(12, 80, 48, 48);
+  if (hover == HIT_SETUP) gfx_circle(36, 104, 20, gfx_ramp_alpha(look.active));
   gfx_circle(36, 104, 18, gfx_ramp_alpha(c));
+}
+
+static void draw_setup(void) {
+  uint32_t c = setup_focus ? look.active : look.button;
+  draw_setup_ring();
   gfx_text_center(&f29, 36, 104, "S", gfx_ramp_over(setup_focus ? look.text_active : look.text, c));
   gfx_clear(60, 90, 80, 30);
   gfx_text(&f28, 62, 104 - f28.line / 2, "Setup", gfx_ramp_alpha(look.text));
@@ -171,9 +194,9 @@ static int hit_test(int x, int y) {
 
 static void redraw_hit(int h) {
   if (h == HIT_NONE) return;
-  if (h == HIT_SETUP) draw_setup();
-  else if (h == HIT_PREV || h == HIT_NEXT) draw_footer();
-  else if (h >= 0 && h < nvis && page_of(h) == page_of(sel)) draw_button(h);
+  if (h == HIT_SETUP) { gfx_keep(24, 92, 24, 24); draw_setup_ring(); gfx_keep_off(); }   // the S kept
+  else if (h == HIT_PREV || h == HIT_NEXT) draw_arrow(h == HIT_NEXT);
+  else if (h >= 0 && h < nvis && page_of(h) == page_of(sel)) draw_hover(h);
 }
 
 static void set_hover(int h) {
@@ -201,7 +224,7 @@ static void launch(int i) {
   // the start sound of [ft812] sound (1..4, 0 none), to its end, as the FT812 menu
   if (look.sound >= 1 && look.sound <= 4) {
     dbg_puts("menu: start sound\n");
-    snd_play(0, &sounds[look.sound - 1], 255);
+    snd_start(look.sound);
     uint32_t t0 = R_MS;
     while (snd_playing(0) && R_MS - t0 < 4000) ;
   }
@@ -272,9 +295,9 @@ void browser_mouse(int ev) {
   if (ev & (M_LEFT | M_RIGHT)) stop_autoload();
   if (ev & M_LEFT) {
     int h = hit_test(ptr.x, ptr.y);
-    if (h >= 0) { set_setup_focus(0); if (h == sel) launch(h); else move_to(h); }
-    else if (h == HIT_PREV) move_to(sel - PAGE);
-    else if (h == HIT_NEXT) move_to(sel + PAGE);
+    if (h >= 0 && h < nvis) { set_setup_focus(0); if (h == sel) launch(h); else move_to(h); }
+    else if (h == HIT_PREV) { if (page_of(sel) > 0) move_to((page_of(sel) - 1) * PAGE); }
+    else if (h == HIT_NEXT) { if (page_of(sel) + 1 < pages()) move_to((page_of(sel) + 1) * PAGE); }
     else if (h == HIT_SETUP) { setup_focus = 0; ui_click(); setup_open(); return; }
   }
   set_hover(ptr.visible ? hit_test(ptr.x, ptr.y) : HIT_NONE);

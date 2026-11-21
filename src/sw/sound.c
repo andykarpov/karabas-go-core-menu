@@ -12,6 +12,8 @@ void snd_play(int ch, const sound_t *s, uint8_t volume) {
   SND(ch, 0xc) = 0x100 | volume;
 }
 
+void snd_start(int n) { if (n >= 1 && n <= 4) snd_play(0, &sounds[n - 1], 255); else snd_stop(0); }
+
 int snd_playing(int ch) { return (SND(ch, 0xc) >> 8) & 1; }
 void snd_stop(int ch) { SND(ch, 0xc) = 0; }
 
