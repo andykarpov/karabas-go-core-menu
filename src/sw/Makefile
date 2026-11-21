@@ -30,9 +30,9 @@ $(B):
 fonts:
 	python3 tools/mkfonts.py fonts_gen.h
 images:
-	python3 tools/mkimages.py ../../../karabas-go-firmware/src/ui/bitmaps.h images_gen.h
+	python3 tools/mkimages.py assets/ft_bitmaps.h images_gen.h
 sounds:
-	python3 tools/mksounds.py ../../../karabas-go-firmware/src/ui/bitmaps.h ../roms/sounds.bin sounds_gen.h
+	python3 tools/mksounds.py assets/ft_bitmaps.h ../roms/sounds.bin sounds_gen.h
 clean:
 	rm -rf $(B)
 .PHONY: all clean fonts images sounds
