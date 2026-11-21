@@ -292,6 +292,11 @@ NET "hdmi_top/p_clk_int" TNM_NET = "TG_CLK_PIX"; # the output of the BUFGMUX clk
 # `make <board>-coremode` analyses the routed design without the PERIODs of the FT mode and this bound, so these
 # paths get the setup and hold of clk_sys.
 TIMESPEC "TS_SYS_TO_PIX" = FROM "TG_CLK_SYS" TO "TG_CLK_PIX" 24.4 ns DATAPATHONLY;
+# The paths inside the pixel clock: its PERIOD derived by ngdbuild from clk_8 and the static multiplier of
+# DCM_CLKGEN (TS_hdmi_top_hdmi_pll_clkgen, 30.5 ns) is the one trce applies to them, TS_CLKGEN above analyses no
+# path. The boot core runs HDMI on clk_sys only (the firmware starts no FT mode for it): bound them by its period,
+# so PAR sees what -coremode checks (the Mini G met 25.5 ns paths of the TMDS encoders by luck before).
+TIMESPEC "TS_PIX" = FROM "TG_CLK_PIX" TO "TG_CLK_PIX" 24.4 ns;
 # FT812 video: taken at the falling FT_CLK, then into the pixel clock through kg_async_fifo (the pixel clock has the
 # frequency of FT_CLK, both from clk_8, and an unknown phase): its Gray pointers and its memory cross, bounded by
 # one FT_CLK period (a pointer is taken one clock later, a word read two clocks after its write at the earliest).

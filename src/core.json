@@ -1,7 +1,7 @@
 {
     "id": "boot",
     "name": "Boot Menu",
-    "build": "26111352",
+    "build": "26112116",
     "visible": false,
     "type": "boot",
     "order": 1,
