@@ -68,6 +68,30 @@ A copy SD1 <-> SD2 / CF goes through the RAM of the CPU (RPC FS reads / writes 5
 Keep the space for it in Ф0-Ф4: the pins of SD2 and CF stay free in the RTL of the menu, the
 memory map of the CPU has slots for the two ports, RPC FS stays in the spec.
 
+## The boot core in the flash of the RP2040 (user, 2026-11-21; to think over before the release)
+
+Goal: the board starts the menu without the SD1 card (no card, a broken card, a card without
+boot.kg). The menu then shows "No cores on the SD card" and Setup (Wi-Fi, the clock, the pads) still
+works. To decide:
+
+- Size. boot.kg of the Mini G today: bitstream 737 KB + menu.bin 216 KB + sounds.bin 319 KB =
+  ~1.27 MB; the firmware ~0.5 MB. The firmware is built for PICO_BOARD pico (2 MB of flash): 1.8 MB
+  of 2 is tight. Check the flash chip of each board (Go / Mini / Mini G, maybe 16 MB). If it is 2 MB:
+  keep the sounds out of the flash copy (the menu runs without them), compress the bitstream
+  (Spartan-6 bitstreams pack well, about 2-3x), or both.
+- How it gets there. (a) A part of the uf2: boot.kg (per board, the uf2 is per board already)
+  linked into the firmware image or a second uf2 block range, updated with each firmware release.
+  (b) A cache: the firmware copies boot.kg from SD1 into a flash partition when it is newer (build
+  id), and uses the copy when the card has none. (c) Both: (a) as the factory copy, (b) on top.
+  (a) is simple and always matches the firmware (the RPC versions); (b) keeps the menu updatable
+  from the card without a firmware flash, which is the point of menu.bin in the ROMs of boot.kg.
+- Which one wins. SD1 boot.kg first (a user build, a test), the flash one when it is missing or
+  does not start (no `'K' 'G' 2` answer after the configuration).
+- The loader: core_loader reads the bitstream and the ROMs from a file now; it needs a source
+  from the flash (XIP reads) as well, the same kgo2 parsing.
+- MSC / msc2 and the firmware update flow (BOOTSEL) stay as they are; a flash write of the cache
+  must not run while the core loads.
+
 ## Status
 
 - Ф0 DONE 2026-11-21 (67c932d): Mini G 5695 LUT (37 %), 6 RAMB16 + 10 RAMB8, timing met (75 MHz:
