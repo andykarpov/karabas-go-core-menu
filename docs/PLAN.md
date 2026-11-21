@@ -118,6 +118,9 @@ memory map of the CPU has slots for the two ports, RPC FS stays in the spec.
   can go to the CPU (MMIO ESP / ESP_OWN, for the Wi-Fi page). Firmware: CFG GET / SET of several
   values a call (one read / one rewrite of karabas.ini), SAVE re-applies the matrix, PREVIEW.
   `src/sw/host/run.sh` draws the screens on the host (a fake firmware) for quick frames.
+  On the board 2026-11-21 (Mini G, firmware feature/rpc 6aba736, menutest.kg): every section as on
+  the host frames, Save round trip (Mouse speed 5 -> 4 -> 5 written, read back from karabas.ini after
+  a reload). Mini G 43 % LUT, 8 RAMB16, timing met (coremode too).
 
 ## Open items
 
