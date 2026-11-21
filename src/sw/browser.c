@@ -13,6 +13,8 @@ core_t cores[MAX_CORES];
 int ncores = 0;
 char autoload_file[33];
 int autoload_s = 0;
+int cores_busy = 0;   // CORES answered busy: the cards are USB drives of the PC (MSC)
+int msc_mode = 0;     // SYS INFO: the USB drive mode, 0 none, 1 the SD card, 2 the second one, 3 it is not found
 char fw_build[9] = "";
 static int vis[MAX_CORES], nvis = 0;   // the visible cores: the list
 
@@ -30,8 +32,11 @@ void cores_read(void) {
   ncores = nvis = 0;
   autoload_s = 0;
   autoload_file[0] = 0;
-  if (rpc_call(RPC_CORES, 0, 0, 0, buf, 2, &n, 3000) != RPC_OK || n < 2) { dbg_puts("menu: SCAN failed\n"); return; }
-  int count = buf[0] | (buf[1] << 8);
+  int st = rpc_call(RPC_CORES, 0, 0, 0, buf, 2, &n, 3000);
+  cores_busy = st == RPC_BUSY;
+  int count = 0;
+  if (st == RPC_OK && n >= 2) count = buf[0] | (buf[1] << 8);
+  else dbg_puts(cores_busy ? "menu: SCAN busy (MSC)\n" : "menu: SCAN failed\n");
   for (int i = 0; i < count && ncores < MAX_CORES; i++) {
     uint8_t idx[2] = { (uint8_t) i, (uint8_t) (i >> 8) };
     if (rpc_call(RPC_CORES, 1, idx, 2, buf, sizeof(buf), &n, 1000) != RPC_OK) continue;
@@ -54,6 +59,7 @@ void cores_read(void) {
   if (rpc_call(RPC_SYS, 0, 0, 0, buf, sizeof(buf), &n, 1000) == RPC_OK && n >= 8) {
     for (int i = 0; i < 8; i++) fw_build[i] = (char) buf[i];
     fw_build[8] = 0;
+    if (n >= 13) msc_mode = buf[12];
   }
 }
 
@@ -70,13 +76,14 @@ static int sel = 0;
 static int autoload_left = -1;
 static uint32_t t_auto = 0;
 static int hover = -1;          // the area under the pointer: a core index, or one of HIT_*
+static int setup_focus = 0;     // the keys are on the Setup button (Left on the first core, as the FT812 menu)
 enum { HIT_PREV = 1000, HIT_NEXT, HIT_SETUP };
 static int page_of(int i) { return i / PAGE; }
 static int pages(void) { return nvis ? (nvis + PAGE - 1) / PAGE : 1; }
 
 static void draw_button(int i) {
   int by = CORE_TOP + (i % PAGE) * CORE_STEP;
-  int on = i == sel;
+  int on = i == sel && !setup_focus;
   gfx_clear(BX - 3, by - 3, BW + 6, BH + 6);
   // hovered: a frame of 2 px in the active colour around the button (the FT812 menu)
   if (hover == i) gfx_round_rect(BX - 2, by - 2, BW + 4, BH + 4, 6, gfx_ramp_alpha(look.active));
@@ -111,7 +118,9 @@ static void draw_page(void) {
   gfx_clear(BX - 4, CORE_TOP - 4, BW + 8, PAGE * CORE_STEP + 4);
   int from = page_of(sel) * PAGE;
   for (int i = from; i < from + PAGE && i < nvis; i++) draw_button(i);
-  if (!nvis) gfx_text_center(&f28, FB_W / 2, CORE_TOP + BH / 2, "No cores on the SD card", gfx_ramp_alpha(look.text));
+  if (!nvis) gfx_text_center(&f28, FB_W / 2, CORE_TOP + BH / 2,
+                             cores_busy ? "The SD card is a USB drive of the PC" : "No cores on the SD card",
+                             gfx_ramp_alpha(look.text));
   draw_footer();
 }
 
@@ -119,8 +128,9 @@ static void draw_page(void) {
 static void draw_setup(void) {
   gfx_clear(14, 82, 40, 44);
   if (hover == HIT_SETUP) gfx_circle(36, 104, 20, gfx_ramp_alpha(look.active));
-  gfx_circle(36, 104, 18, gfx_ramp_alpha(look.button));
-  gfx_text_center(&f29, 36, 104, "S", gfx_ramp_over(look.text, look.button));
+  uint32_t c = setup_focus ? look.active : look.button;
+  gfx_circle(36, 104, 18, gfx_ramp_alpha(c));
+  gfx_text_center(&f29, 36, 104, "S", gfx_ramp_over(setup_focus ? look.text_active : look.text, c));
   gfx_clear(60, 90, 80, 30);
   gfx_text(&f28, 62, 104 - f28.line / 2, "Setup", gfx_ramp_alpha(look.text));
 }
@@ -181,7 +191,9 @@ static void move_to(int n) {
   int old = sel;
   sel = n;
   ui_click();
-  if (page_of(old) != page_of(sel)) draw_page();
+  // another page: the whole screen into the hidden buffer, then shown (cleared and drawn in the shown one,
+  // the list blinked)
+  if (page_of(old) != page_of(sel)) draw_all();
   else { draw_button(old); draw_button(sel); draw_footer(); }
 }
 
@@ -215,9 +227,32 @@ void browser_open(void) {
   draw_all();
 }
 
+// the keys on the Setup button: Enter opens it, Right / Up / Down go back to the cores
+static void set_setup_focus(int on) {
+  if (on == setup_focus) return;
+  setup_focus = on;
+  ui_click();
+  draw_setup();
+  if (nvis) draw_button(sel);
+}
+
 void browser_key(const key_ev_t *e) {
   pointer_hide();
   stop_autoload();
+  if (setup_focus) {
+    switch (e->key) {
+      case K_ENTER: case K_S: case K_PAD_START: setup_focus = 0; ui_click(); setup_open(); return;
+      case K_RIGHT: case K_UP: case K_DOWN: set_setup_focus(0); break;
+    }
+    pointer_show();
+    return;
+  }
+  // on the first core (or with no cores): Left goes onto Setup, not by a held key
+  if (e->key == K_LEFT && sel == 0) {
+    if (!e->repeat) set_setup_focus(1);
+    pointer_show();
+    return;
+  }
   switch (e->key) {
     case K_UP: move_to(sel - 1); break;
     case K_DOWN: move_to(sel + 1); break;
@@ -237,10 +272,10 @@ void browser_mouse(int ev) {
   if (ev & (M_LEFT | M_RIGHT)) stop_autoload();
   if (ev & M_LEFT) {
     int h = hit_test(ptr.x, ptr.y);
-    if (h >= 0) { if (h == sel) launch(h); else move_to(h); }
+    if (h >= 0) { set_setup_focus(0); if (h == sel) launch(h); else move_to(h); }
     else if (h == HIT_PREV) move_to(sel - PAGE);
     else if (h == HIT_NEXT) move_to(sel + PAGE);
-    else if (h == HIT_SETUP) { ui_click(); setup_open(); return; }
+    else if (h == HIT_SETUP) { setup_focus = 0; ui_click(); setup_open(); return; }
   }
   set_hover(ptr.visible ? hit_test(ptr.x, ptr.y) : HIT_NONE);
   pointer_show();
@@ -260,6 +295,43 @@ void browser_tick(void) {
     }
   }
   if (R_MS - t_clock >= 1000) { t_clock = R_MS; pointer_hide(); draw_clock(); pointer_show(); }
+}
+
+// ---- the USB drive mode (MSC) ----
+
+// the screen of app_msc_ft_draw of the FT812 menu: the background and the decor of the menu, the title and
+// the lines of the firmware's msc screen, nothing to choose; the firmware reboots when the PC ejects the card
+static const char *const msc_lines[3][6] = {
+  { "The SD card is connected to the", "PC as a USB drive.", "", "Eject it on the PC to return", "to the menu.", "" },
+  { "The second SD card (FPGA slot)", "is connected to the PC as a", "USB drive.", "", "Eject it on the PC to return",
+    "to the menu." },
+  { "The second SD card (FPGA slot)", "is not found.", "", "Back to the menu...", "", "" },
+};
+
+void browser_msc_draw(void) {
+  int m = msc_mode >= 1 && msc_mode <= 3 ? msc_mode - 1 : 0;
+  scr_begin();
+  look_apply();
+  draw_logo();
+  draw_character();
+  draw_clock();
+  ramp_t t = gfx_ramp_alpha(look.text);
+  int y = FB_H / 2 - 80;
+  gfx_text_center(&f30, FB_W / 2, y, "USB mass storage", t);
+  for (int i = 0; i < 6; i++) if (msc_lines[m][i][0]) gfx_text_center(&f28, FB_W / 2, y + 50 + i * 24, msc_lines[m][i], t);
+  scr_end();
+  dbg_puts("menu: msc screen\n");
+}
+
+void browser_msc(void) {
+  browser_msc_draw();
+  uint32_t t_clock = R_MS;
+  for (;;) {
+    key_ev_t e;
+    mouse_next();
+    key_next(&e);   // the keys do nothing here
+    if (R_MS - t_clock >= 1000) { t_clock = R_MS; pointer_hide(); draw_clock(); pointer_show(); }
+  }
 }
 
 // the list again after Setup (the sort or the visible cores may differ): the selected core kept

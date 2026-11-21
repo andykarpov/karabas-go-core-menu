@@ -62,7 +62,7 @@ wire [8:0] vid_len, vid_wa;
 wire [15:0] vid_wd;
 wire [8:0] pal_wa;
 wire [27:0] pal_wd;
-wire [23:0] grad_top, grad_bot, glow;
+wire [23:0] grad_top, grad_bot;
 wire [27:0] rgba;
 wire v_hs, v_vs, v_de, v_show;
 wire [20:0] MA;
@@ -99,11 +99,10 @@ menu_video video (
 	.frame_t(frame_t),
 	.clk_pix(clk_pix), .rgba(rgba), .show_o(v_show), .hs(v_hs), .vs(v_vs), .de(v_de)
 );
-// the picture as the top makes it: the glow of menu_bg, menu_compose
-menu_bg background (.clk(clk_pix), .hs_i(v_hs), .vs_i(v_vs), .de_i(v_de), .rgb_o(glow), .hs_o(), .vs_o(), .de_o());
+// the picture as the top makes it: menu_compose, black before the first frame of the CPU
 menu_compose compose (
 	.clk(clk_pix), .rgba_i(rgba), .show_i(v_show), .hs_i(v_hs), .vs_i(v_vs), .de_i(v_de),
-	.glow_i(glow), .grad_top(grad_top), .grad_bot(grad_bot),
+	.glow_i(24'd0), .grad_top(grad_top), .grad_bot(grad_bot),
 	.rgb_o(rgb), .hs_o(hs), .vs_o(vs), .de_o(de)
 );
 reg [2:0] show_pipe = 3'd0;

@@ -59,7 +59,7 @@ it (`rpc_call(svc, fn, in, in_len, out, &out_len)`).
 ### 00 SYS
 | F | Name | In | Out |
 |---|---|---|---|
-| 00 | `INFO` | | firmware build (8), board, RPC version, the services of the firmware (mask) |
+| 00 | `INFO` | | firmware build (8), board, RPC version, the services of the firmware (mask), USB drive mode (0 none, 1 SD, 2 SD2, 3 SD2 not found) |
 | 01 | `TIME_GET` | | year (2), month, day, hour, minute, second, weekday |
 | 02 | `TIME_SET` | as `TIME_GET` | |
 | 03 | `ACTION` | action | | 0 MSC (card), 1 MSC2 (SD2), 2 BOOTSEL, 3 reboot the MCU |
