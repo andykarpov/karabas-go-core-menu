@@ -68,6 +68,14 @@ A copy SD1 <-> SD2 / CF goes through the RAM of the CPU (RPC FS reads / writes 5
 Keep the space for it in Ф0-Ф4: the pins of SD2 and CF stay free in the RTL of the menu, the
 memory map of the CPU has slots for the two ports, RPC FS stays in the spec.
 
+## Status
+
+- Ф0 DONE 2026-11-21 (67c932d): Mini G 5695 LUT (37 %), 6 RAMB16 + 10 RAMB8, timing met (75 MHz:
+  12.886 ns, 0.45 ns of slack), coremode met; sim `src/sim/soc/run_soc_sim.sh` 0 errors; on the board
+  as a separate test core `menutest.kg` (type osd, the real `boot.kg` untouched): the frame drawn by
+  the CPU, the frame counter running, the keyboard report read. Test cores go to the card under
+  another name until the release (user).
+
 ## Open items
 
 - The menu resolution: 800 x 600 now; the FT modes of `ft_height()` go away.
