@@ -151,17 +151,18 @@ assign WA                 = 3'b000;
 assign ESP32_SPI_CS_N     = 1'b1;
 
 // system clocks
-wire clk_sys, clk_sys_pll, clk_8mhz;
+wire clk_sys, clk_sys_pll, clk_8mhz, clk_cpu;
 wire locked, areset;
 
-// VCO 50 * 18 / 2 = 450 MHz, phase 0: clk_sys 40.91 MHz (/11: the menu, its 800 x 600 video, the MCU link),
-// clk_8 8.18 MHz (/55: FT_CLK_OUT, the base of DCM_CLKGEN in hdmi_pll). The PLL output of clk_sys has no BUFG in
-// kg_pll: it drives the BUFG of clk_sys and the BUFGMUX of hdmi_pll.
+// VCO 50 * 18 / 2 = 450 MHz, phase 0: clk_sys 40.91 MHz (/11: the 800 x 600 video, HDMI, audio), clk_8 8.18 MHz
+// (/55: FT_CLK_OUT, the base of DCM_CLKGEN in hdmi_pll), clk_cpu 75 MHz (/6: the menu CPU, the SRAM, the MCU link,
+// the ESP and MIDI uarts). The PLL output of clk_sys has no BUFG in kg_pll: it drives the BUFG of clk_sys and the
+// BUFGMUX of hdmi_pll.
 wire [5:0] pll_clk;
 kg_pll #(
     .DIVCLK_DIVIDE(2), .CLKFBOUT_MULT(18),
-    .CLKOUT0_DIVIDE(11), .CLKOUT1_DIVIDE(55),
-    .BUFG_MASK(6'b000010)
+    .CLKOUT0_DIVIDE(11), .CLKOUT1_DIVIDE(55), .CLKOUT2_DIVIDE(6),
+    .BUFG_MASK(6'b000110)
 ) pll (
     .clk_in              (CLK_50MHZ),
     .rst                 (1'b0),
@@ -170,23 +171,14 @@ kg_pll #(
 );
 assign clk_sys_pll = pll_clk[0];
 assign clk_8mhz = pll_clk[1];
+assign clk_cpu = pll_clk[2];
 BUFG bufg_clk_sys(.I(clk_sys_pll), .O(clk_sys));
 assign areset = ~locked;
 
-// the SRAM is filled with zeros once after the PLL lock (0.2 s), so the next core starts with clean memory
-wire [15:0] sram_data;
-wire sram_data_oe;
-sram_clear sram_clear (
-    .clk                (clk_sys),
-    .reset              (areset),
-    .addr               (MA),
-    .data               (sram_data),
-    .data_oe            (sram_data_oe),
-    .we_n               (MWR_N),
-    .rd_n               (MRD_N),
-    .done               ()
-);
-assign MD = sram_data_oe ? sram_data : 16'bz;
+// the reset of the clk_cpu side, synchronous to it
+reg [1:0] areset_cpu = 2'b11;
+always @(posedge clk_cpu) areset_cpu <= { areset_cpu[0], areset };
+wire reset_cpu = areset_cpu[1];
 
 // ft clk 8mhz out
 ODDR2 u_ft_clk (.Q(FT_CLK_OUT), .C0(clk_8mhz), .C1(~clk_8mhz), .CE(1'b1), .D0(1'b1), .D1(1'b0), .R(1'b0), .S(1'b0));
@@ -198,7 +190,13 @@ IBUFG ibufg_mcu_sck(.I(MCU_SCK), .O(mcu_sck_ibufg));
 BUFG bufg_mcu_sck(.I(mcu_sck_ibufg), .O(mcu_sck));
 
 // ft control signals / mcu only access
-wire vdac2_sel = mcu_ft_vga_on;
+// kg_mcu2 runs on clk_cpu: its FT video and DVI settings into clk_sys first (hdmi_top takes clk_sys registers)
+reg [1:0] ft_vga_s = 2'b00, dvi_only_s = 2'b00;
+always @(posedge clk_sys) begin
+    ft_vga_s <= { ft_vga_s[0], mcu_ft_vga_on };
+    dvi_only_s <= { dvi_only_s[0], dvi_only };
+end
+wire vdac2_sel = ft_vga_s[1];
 assign FT_SPI_CS_N = mcu_ft_spi_on ? mcu_ft_cs_n : 1'b1;
 assign FT_SPI_SCK = mcu_ft_spi_on ? mcu_sck_ibufg : 1'b1;
 // the SD2 pass-through takes the IBUFG output too (a BUFG does not drive a pad)
@@ -235,7 +233,7 @@ hdmi_top #(.SAMPLERATE(48000)) hdmi_top(
 
     .ft_sel             (vdac2_sel),
 
-    .audio_en           (~dvi_only),
+    .audio_en           (~dvi_only_s[1]),
     .audio_l            (audio_mix_l),
     .audio_r            (audio_mix_r),
 
@@ -290,6 +288,15 @@ assign MCU_IO[1] = mcu_int;
 assign MCU_IO[0] = 1'bz;
 assign MCU_IO[5:2] = 4'bzzzz;
 
+// HID and the loader of kg_mcu2 for menu_soc
+wire [55:0] kbd;
+wire kbd_wr, ms_wr;
+wire [7:0] ms_x, ms_y, ms_b;
+wire [15:0] joy_l, joy_r;
+wire [1:0] ld_kind;
+wire ld_active, ld_end, ld_wr, ld_ready;
+wire [31:0] ld_addr;
+wire [7:0] ld_data;
 wire osd_wr, osd_en, osd_zoom;
 wire [11:0] osd_waddr;
 wire [7:0] osd_wdata;
@@ -310,20 +317,20 @@ assign midi_data = port_out_data[23:16];
 assign midi_wr = port_out_wr[2];
 
 kg_mcu2 #(
-    .CAPS(16'h0200), .SW_N(2), .CS_FILTER(3),
+    .CAPS(16'h0210),     // bit 9 MIDI IN, bit 4 the core drives LD_READY (the menu program is loaded into the SRAM) .SW_N(2), .CS_FILTER(3),
     .ENABLE_OSD(1), .ENABLE_PORTS(4'b0110), .PORT_IN_AW(6),
     .ENABLE_FT(1), .ENABLE_SD2(1)
 ) mcu(
-    .CLK(clk_sys), .N_RESET(~areset),
+    .CLK(clk_cpu), .N_RESET(~reset_cpu),
     .MCU_SCK(mcu_sck), .MCU_MOSI(MCU_MOSI), .MCU_MISO(MCU_MISO), .MCU_SS(MCU_CS_N), .MCU_INT(mcu_int),
     .MCU_SPI_FT_SS(MCU_IO[3]), .MCU_SPI_SD2_SS(MCU_IO[2]),
 
     .SW(), .SW_WR(), .SW_INDEX(), .SW_VALUE(), .HW_ID(), .DVI_ONLY(dvi_only), .CORE_BUILD(), .FW_BUILD(),
     .BUSY(), .BTNS(), .RELOAD_REQ(1'b0), .RELOAD_CORE(8'd0),
-    .KBD(), .KBD_WR(), .PS2_CODE(), .PS2_KIND(), .PS2_WR(), .MS_X(), .MS_Y(), .MS_Z(), .MS_B(), .MS_WR(),
-    .JOY_L(), .JOY_R(), .JOY_WR(), .PS2_CMD(16'h0000), .PS2_CMD_WR(1'b0),
-    .LD_KIND(), .LD_SLOT(), .LD_SIZE(), .LD_START(), .LD_ACTIVE(), .LD_END(), .LD_ADDR(), .LD_DATA(),
-    .LD_WR(), .LD_READY(1'b1),
+    .KBD(kbd), .KBD_WR(kbd_wr), .PS2_CODE(), .PS2_KIND(), .PS2_WR(), .MS_X(ms_x), .MS_Y(ms_y), .MS_Z(),
+    .MS_B(ms_b), .MS_WR(ms_wr), .JOY_L(joy_l), .JOY_R(joy_r), .JOY_WR(), .PS2_CMD(16'h0000), .PS2_CMD_WR(1'b0),
+    .LD_KIND(ld_kind), .LD_SLOT(), .LD_SIZE(), .LD_START(), .LD_ACTIVE(ld_active), .LD_END(ld_end),
+    .LD_ADDR(ld_addr), .LD_DATA(ld_data), .LD_WR(ld_wr), .LD_READY(ld_ready),
 
     .OSD_WR(osd_wr), .OSD_WADDR(osd_waddr), .OSD_WDATA(osd_wdata), .OSD_EN(osd_en),
     .OSD_FG(osd_fg), .OSD_BG(osd_bg), .OSD_ALPHA(osd_alpha), .OSD_PX(osd_px), .OSD_PY(osd_py),
@@ -346,14 +353,14 @@ kg_mcu2 #(
 //--------- MIDI thru -------
 // the bytes of a USB MIDI keyboard (PORT 2) to the SAM2695 at 31250 baud: the keyboard plays
 // the synth of the board in the menu (karabas-go-firmware docs/usb_midi_plan.md)
-kg_midi_tx #(.CLK_HZ(40910000)) midi_thru(
-	.clk(clk_sys), .data(midi_data), .wr(midi_wr), .overflow(), .tx(MIDI_TX)
+kg_midi_tx #(.CLK_HZ(75000000)) midi_thru(
+	.clk(clk_cpu), .data(midi_data), .wr(midi_wr), .overflow(), .tx(MIDI_TX)
 );
 
 //--------- ESP8266 UART -------
-esp8266 esp8266(
-    .CLK                (clk_sys),
-    .RESET              (areset),
+esp8266 #(.CLKS_PER_BIT(651)) esp8266(    // 75 MHz / 115200
+    .CLK                (clk_cpu),
+    .RESET              (reset_cpu),
 
     .ESP_UART_RX_DATA   (esp_uart_rx_data),
     .ESP_UART_RX_WR     (esp_uart_rx_wr),
@@ -366,30 +373,67 @@ esp8266 esp8266(
     .UART_CTS           (UART_CTS)
 );
 
-//--------- VGA sync ---------
-wire vga_hs, vga_vs, vga_de;
-vga_sync vga_sync(
-    .clk                (clk_sys),
-    .hs                 (vga_hs),
-    .vs                 (vga_vs),
-    .de                 (vga_de)
+//--------- the menu computer ---------
+// menu_soc (docs/PLAN.md): VexRiscv, its program loaded from the ROMs of boot.kg into the SRAM, the frame buffers
+// in the SRAM; it clears the SRAM after the PLL lock (every core starts with clean memory)
+wire vid_req, vid_we, pal_we, fb_sel, fb_shown, frame_t, fb_show;
+wire [20:0] vid_adr;
+wire [8:0] vid_len, vid_wa;
+wire [15:0] vid_wd;
+wire [7:0] pal_wa;
+wire [23:0] pal_wd;
+wire [15:0] sram_do, sram_oe_n;
+
+menu_soc soc (
+    .clk(clk_cpu), .reset(reset_cpu),
+    .ld_kind(ld_kind), .ld_active(ld_active), .ld_end(ld_end), .ld_addr(ld_addr), .ld_data(ld_data),
+    .ld_wr(ld_wr), .ld_ready(ld_ready),
+    .kbd(kbd), .kbd_wr(kbd_wr), .ms_x(ms_x), .ms_y(ms_y), .ms_b(ms_b), .ms_wr(ms_wr), .joy_l(joy_l), .joy_r(joy_r),
+    .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
+    .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .fb_sel(fb_sel), .fb_shown(fb_shown),
+    .frame_t(frame_t), .show(fb_show),
+    .dbg_uart(), .dbg_uart_wr(), .cpu_run(),
+    .MA(MA), .MD_I(MD), .MD_O(sram_do), .MD_OE_N(sram_oe_n), .MWR_N(MWR_N), .MRD_N(MRD_N)
+);
+genvar gi;
+generate for (gi = 0; gi < 16; gi = gi + 1) begin : g_md
+    assign MD[gi] = sram_oe_n[gi] ? 1'bz : sram_do[gi];
+end endgenerate
+
+//--------- video ---------
+// the frame buffer of the CPU (800 x 600, the timing of the old vga_sync), 4 clocks after its counters
+wire [23:0] fb_rgb;
+wire fb_on, vga_hs, vga_vs, vga_de;
+menu_video video (
+    .clk_cpu(clk_cpu),
+    .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
+    .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .show(fb_show), .fb_sel(fb_sel), .fb_shown(fb_shown),
+    .frame_t(frame_t),
+    .clk_pix(clk_sys), .rgb(fb_rgb), .show_o(fb_on), .hs(vga_hs), .vs(vga_vs), .de(vga_de)
 );
 
 //--------- background ---------
-// the glow of the FT812 menu behind the OSD (menu_bg: a gradient that breathes and drifts in tint),
-// one clock behind vga_sync with its syncs
-wire [23:0] bg_rgb;
+// the glow of the FT812 menu behind the OSD (menu_bg: a gradient that breathes and drifts in tint), one clock
+// behind its syncs; the frame buffer of the CPU instead while it shows one
+wire [23:0] glow_rgb;
 wire bg_hs, bg_vs, bg_de;
 menu_bg background(
     .clk(clk_sys), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
-    .rgb_o(bg_rgb), .hs_o(bg_hs), .vs_o(bg_vs), .de_o(bg_de)
+    .rgb_o(glow_rgb), .hs_o(bg_hs), .vs_o(bg_vs), .de_o(bg_de)
 );
+reg [23:0] fb_rgb_d = 24'd0;
+reg fb_on_d = 1'b0;
+always @(posedge clk_sys) begin
+    fb_rgb_d <= fb_rgb;
+    fb_on_d <= fb_on;
+end
+wire [23:0] bg_rgb = fb_on_d ? fb_rgb_d : glow_rgb;
 
 //--------- OSD --------------
 // the screen of the menu is the bitmap OSD over the background, scale 2 (512 x 256 of 800 x 600);
 // HDMI takes the syncs as they come out of the overlay (2 clocks later)
 kg_l2_osd_overlay #(.SCALE(2)) overlay(
-    .wclk(clk_sys), .osd_wr(osd_wr), .osd_waddr(osd_waddr), .osd_wdata(osd_wdata), .osd_en(osd_en),
+    .wclk(clk_cpu), .osd_wr(osd_wr), .osd_waddr(osd_waddr), .osd_wdata(osd_wdata), .osd_en(osd_en),
     .osd_fg(osd_fg), .osd_bg(osd_bg), .osd_alpha(osd_alpha), .osd_px(osd_px), .osd_py(osd_py),
     .osd_pw(osd_pw), .osd_ph(osd_ph), .osd_place(osd_place), .osd_zoom(osd_zoom),
     .clk(clk_sys), .rgb_i(bg_rgb), .hs_i(bg_hs), .vs_i(bg_vs), .de_i(bg_de),
