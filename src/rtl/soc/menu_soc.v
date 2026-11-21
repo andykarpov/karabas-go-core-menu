@@ -87,7 +87,7 @@ module menu_soc #(
 	output reg pal_we = 1'b0,
 	output reg [8:0] pal_wa = 9'd0,     // { bank, entry }
 	output reg [27:0] pal_wd = 28'd0,
-	output reg [23:0] grad_top = 24'h0000C8,  // the FT812 defaults of the firmware
+	output reg [23:0] grad_top = 24'h000000,  // black until the CPU writes the colours of karabas.ini
 	output reg [23:0] grad_bot = 24'h000000,
 	output reg fb_sel = 1'b0,             // the buffer to show
 	input wire fb_shown,                  // the one shown (synchronised to clk)

@@ -9,5 +9,6 @@ extern core_t cores[MAX_CORES];  // all of them (Setup > Autoload > Core)
 extern int ncores;
 extern char autoload_file[33];   // CORES AUTOLOAD: "" none
 extern int autoload_s;
+extern int cores_busy;           // CORES busy: the cards are USB drives of the PC
 extern char fw_build[9];
 void cores_read(void);

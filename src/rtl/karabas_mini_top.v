@@ -456,18 +456,14 @@ menu_video video (
 );
 
 //--------- background ---------
-// the glow of the old menu (menu_bg: a gradient that breathes and drifts in tint, one clock behind its syncs)
-// while the CPU shows nothing; else the FT812 gradient of menu_compose, the frame buffer blended over it
-wire [23:0] glow_rgb;
-menu_bg background(
-    .clk(clk_sys), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
-    .rgb_o(glow_rgb), .hs_o(), .vs_o(), .de_o()
-);
+// black while the CPU shows nothing (the load of its program, the wait for RPC): no colour before the one of
+// karabas.ini (the blue glow of menu_bg was seen before the menu); else the FT812 gradient of menu_compose,
+// the frame buffer blended over it
 wire [23:0] bg_rgb;
 wire bg_hs, bg_vs, bg_de;
 menu_compose compose(
     .clk(clk_sys), .rgba_i(fb_rgba), .show_i(fb_on), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
-    .glow_i(glow_rgb), .grad_top(grad_top), .grad_bot(grad_bot),
+    .glow_i(24'd0), .grad_top(grad_top), .grad_bot(grad_bot),
     .rgb_o(bg_rgb), .hs_o(bg_hs), .vs_o(bg_vs), .de_o(bg_de)
 );
 

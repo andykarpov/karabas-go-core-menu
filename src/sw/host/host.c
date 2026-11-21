@@ -203,7 +203,9 @@ int main(int argc, char **argv) {
   cores_read();
   browser_start();
   browser_open();                                dump("00_browser");
-  keys("s");                                     dump("01_tabs_system");
+  keys("l");                                     dump("00b_setup_focus");   // Left on the first core
+  keys("r");                                     dump("00c_setup_unfocus");
+  keys("le");                                    dump("01_tabs_system");    // Enter on the Setup button
   keys("e");                                     dump("02_page_system");
   keys("xde");                                   dump("03_page_autoload");
   keys("xde");                                   dump("04_page_display");
