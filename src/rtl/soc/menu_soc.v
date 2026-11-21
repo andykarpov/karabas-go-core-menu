@@ -17,6 +17,9 @@
      08 R  FRAMES: frames begun (the start of the vertical sync)
      0c R  CYCLES: clocks since the CPU started (low 32)
      10 W  SHOW: bit 0 the frame buffer on the screen (0: the background of the old menu)
+     14 W  LAUNCH: the RPC call written (CORES LAUNCH) is made after the clear of the SRAM: the CPU
+           stops for good, the SRAM is cleared (the next core starts with clean memory), then the call
+           goes to the firmware, which replaces the core
      1c R  MS: milliseconds since the CPU started
      28 R  KBD0: kg_mcu2 KBD[31:0] = { key 3, key 2, key 1, modifiers } (the USB boot report)
      2c R  KBD1: { 0, key 6, key 5, key 4 }            30 R  KBDN: reports seen (a counter)
@@ -24,6 +27,8 @@
      38 R  JOY: { joy_r, joy_l }
      40 R  US: microseconds since the CPU started
      400..7fc W  PAL: palette entry ((a - 400) / 4) = 0x00RRGGBB
+     2000..3ffc  RPC: byte (a - 2000) / 4 of the mailbox of kg_l2_rpc (kg_mcu2 RPC_*), in the low byte
+                 of a word (map in kg_l2_rpc.v: request 000.., response 200.., event 400.., registers 600..)
  Instruction fetch and data share the SRAM (the data first); an owner keeps it to the last ack of its
  transaction (CTI 010 = more beats).
 
@@ -75,6 +80,12 @@ module menu_soc #(
 	input wire frame_t,                   // toggles at each frame (synchronised to clk)
 	output reg show = 1'b0,
 
+	// RPC (kg_mcu2 RPC_*)
+	output reg [10:0] rpc_a = 11'd0,
+	output reg rpc_we = 1'b0,
+	output reg [7:0] rpc_wd = 8'd0,
+	input wire [7:0] rpc_rd,
+
 	// debug
 	output reg [7:0] dbg_uart = 8'd0,
 	output reg dbg_uart_wr = 1'b0,
@@ -97,17 +108,23 @@ reg clr_req = 1'b0;
 wire clr_busy;
 always @(posedge clk) begin
 	reset_d <= reset;
-	clr_req <= reset_d & ~reset;
+	clr_req <= (reset_d & ~reset) | launch_clr;
 end
 
 reg loaded = 1'b0;                    // a program came (the end of a kind 0 load)
+reg halted = 1'b0;                    // LAUNCH: the CPU stops for good (its program is cleared)
 reg cpu_reset = 1'b1;
 assign cpu_run = ~cpu_reset;
 always @(posedge clk) begin
 	if (reset) loaded <= 1'b0;
 	else if (ld_end && ld_kind == 2'd0) loaded <= 1'b1;
-	cpu_reset <= reset | ld_active | clr_busy | clr_req | ~loaded;
+	cpu_reset <= reset | ld_active | clr_busy | clr_req | ~loaded | halted;
 end
+
+// LAUNCH: the clear, then the call (the write of 605 to kg_l2_rpc)
+reg launch_clr = 1'b0;                // the clear is asked
+reg launch_wait = 1'b0;               // waiting for its end
+reg launch_call = 1'b0;               // one clock: the call
 
 reg ld_pend = 1'b0;
 reg [21:0] ld_a = 22'd0;
@@ -220,6 +237,10 @@ reg [7:0] ms_btn = 8'd0;
 reg io_ack = 1'b0;
 reg [31:0] io_dat = 32'd0;
 wire [11:0] io_off = { d_adr[9:0], 2'b00 };
+wire io_rpc = d_adr[11:11] == 1'b1;          // 0x2000..0x3ffc (word address bit 11)
+// an RPC read: kg_l2_rpc registers the address, then its RAM / register output: rpc_rd is valid two
+// clocks after rpc_a
+reg rpc_rd_wait = 1'b0, rpc_rd_wait2 = 1'b0;
 
 function signed [11:0] sat_add(input signed [11:0] a, input [7:0] d);
 	reg signed [12:0] s;
@@ -233,6 +254,26 @@ always @(posedge clk) begin
 	io_ack <= 1'b0;
 	pal_we <= 1'b0;
 	dbg_uart_wr <= 1'b0;
+	rpc_we <= 1'b0;
+	launch_clr <= 1'b0;
+	launch_call <= 1'b0;
+	if (launch_wait && !clr_req && !clr_busy && !launch_clr) begin
+		launch_wait <= 1'b0;
+		rpc_a <= 11'h605;
+		rpc_wd <= 8'h01;
+		rpc_we <= 1'b1;
+	end
+	if (reset) begin
+		halted <= 1'b0;
+		launch_wait <= 1'b0;
+	end
+	// an RPC read: the byte a clock after its address
+	rpc_rd_wait2 <= rpc_rd_wait;
+	rpc_rd_wait <= 1'b0;
+	if (rpc_rd_wait2) begin
+		io_ack <= 1'b1;
+		io_dat <= { 24'd0, rpc_rd };
+	end
 	if (cpu_reset) begin
 		cycles <= 32'd0;
 		ms <= 32'd0;
@@ -259,7 +300,15 @@ always @(posedge clk) begin
 		fb_sel <= 1'b0;
 	end
 
-	if (d_req && d_io && !io_ack && !cpu_reset) begin
+	if (d_req && d_io && !io_ack && !rpc_rd_wait && !rpc_rd_wait2 && !cpu_reset && io_rpc) begin
+		rpc_a <= d_adr[10:0];
+		if (d_we) begin
+			rpc_wd <= d_dat_o[7:0];
+			rpc_we <= 1'b1;
+			io_ack <= 1'b1;
+		end else
+			rpc_rd_wait <= 1'b1;
+	end else if (d_req && d_io && !io_ack && !rpc_rd_wait && !rpc_rd_wait2 && !cpu_reset && !io_rpc) begin
 		io_ack <= 1'b1;
 		if (d_we) begin
 			if (io_off[11:10] == 2'b01) begin   // 0x400..0x7fc
@@ -270,6 +319,7 @@ always @(posedge clk) begin
 				8'h00: begin dbg_uart <= d_dat_o[7:0]; dbg_uart_wr <= 1'b1; end
 				8'h04: fb_sel <= d_dat_o[0];
 				8'h10: show <= d_dat_o[0];
+				8'h14: begin halted <= 1'b1; show <= 1'b0; launch_clr <= 1'b1; launch_wait <= 1'b1; end
 				default: ;
 			endcase
 		end else begin

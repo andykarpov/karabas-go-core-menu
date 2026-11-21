@@ -1,8 +1,15 @@
-# Link v2 target RPC (draft)
+# Link v2 target RPC
 
-Draft of 2026-11-21 (`docs/PLAN.md`, phase Ф1). When it is agreed it moves into
-karabas-go-firmware `docs/link_v2.md` (section 5.9, + `link_v2.ru.md`); the FPGA side is
-`kg_l2_rpc` in karabas-go-modules.
+The spec is in karabas-go-firmware `docs/link_v2.md` section 5.9 (+ `link_v2.ru.md`, branch
+`feature/rpc` until the release); the FPGA side is `kg_l2_rpc` of karabas-go-modules (branch
+`feature/rpc`), the firmware side `src/fpga/link_api.c` (`link_rpc_*`) and `src/fpga/rpc_server.c`.
+This file keeps the design notes and the services planned for later phases.
+
+Done in Ф1 (2026-11-21), different from the first draft: the read of the sum of `REQ` ends the irq
+(the request stays until its response, it can be read again); CFG `SET` writes the line at once
+and `SAVE` only takes the settings into the firmware; the menu reaches the mailbox at MMIO
+0x80002000 + 4 x byte (`src/sw/rpc.c`), `LAUNCH` through the MMIO register 0x14 (the clear, then
+the call).
 
 ## 1. Why a mailbox
 

@@ -11,12 +11,12 @@ all: ../roms/menu.bin
 	mkdir -p ../roms
 	cp $< $@
 
-$(B)/%.o: %.c mmio.h font8.h | $(B)
+$(B)/%.o: %.c mmio.h font8.h rpc.h | $(B)
 	$(CROSS)gcc $(CFLAGS) -c $< -o $@
 $(B)/%.o: %.S | $(B)
 	$(CROSS)gcc $(CFLAGS) -c $< -o $@
-$(B)/menu.elf: $(B)/crt0.o $(B)/main.o link.ld
-	$(CROSS)gcc $(CFLAGS) -nostdlib -nostartfiles -T link.ld -Wl,--gc-sections -o $@ $(B)/crt0.o $(B)/main.o -lgcc
+$(B)/menu.elf: $(B)/crt0.o $(B)/main.o $(B)/rpc.o link.ld
+	$(CROSS)gcc $(CFLAGS) -nostdlib -nostartfiles -T link.ld -Wl,--gc-sections -o $@ $(B)/crt0.o $(B)/main.o $(B)/rpc.o -lgcc
 	$(CROSS)size $@
 $(B)/menu.bin: $(B)/menu.elf
 	$(CROSS)objcopy -O binary $< $@

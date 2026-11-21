@@ -297,6 +297,10 @@ wire [1:0] ld_kind;
 wire ld_active, ld_end, ld_wr, ld_ready;
 wire [31:0] ld_addr;
 wire [7:0] ld_data;
+// the RPC mailbox of kg_mcu2 (target 08) for menu_soc
+wire [10:0] rpc_a;
+wire rpc_we;
+wire [7:0] rpc_wd, rpc_rd;
 wire osd_wr, osd_en, osd_zoom;
 wire [11:0] osd_waddr;
 wire [7:0] osd_wdata;
@@ -319,7 +323,8 @@ assign midi_wr = port_out_wr[2];
 kg_mcu2 #(
     .CAPS(16'h0210),     // bit 9 MIDI IN, bit 4 the core drives LD_READY (the menu program is loaded into the SRAM) .SW_N(2), .CS_FILTER(3),
     .ENABLE_OSD(1), .ENABLE_PORTS(4'b0110), .PORT_IN_AW(6),
-    .ENABLE_FT(1), .ENABLE_SD2(1)
+    .ENABLE_FT(1), .ENABLE_SD2(1),
+    .ENABLE_RPC(1), .RPC_SERVICES(16'h0007)    // SYS, CFG, CORES (karabas-go-firmware docs/link_v2.md 5.9)
 ) mcu(
     .CLK(clk_cpu), .N_RESET(~reset_cpu),
     .MCU_SCK(mcu_sck), .MCU_MOSI(MCU_MOSI), .MCU_MISO(MCU_MISO), .MCU_SS(MCU_CS_N), .MCU_INT(mcu_int),
@@ -347,6 +352,7 @@ kg_mcu2 #(
 
     .FT_SPI_ON(mcu_ft_spi_on), .FT_VGA_ON(mcu_ft_vga_on), .FT_RESET(), .FT_SCK(), .FT_MOSI(mcu_ft_mosi),
     .FT_MISO(FT_SPI_MISO), .FT_CS_N(mcu_ft_cs_n),
+    .RPC_A(rpc_a), .RPC_WE(rpc_we), .RPC_WD(rpc_wd), .RPC_RD(rpc_rd),
     .SD2_SCK(), .SD2_MOSI(SD_DI), .SD2_MISO(SD_DO), .SD2_CS_N(SD_CS_N)
 );
 
@@ -392,6 +398,7 @@ menu_soc soc (
     .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
     .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .fb_sel(fb_sel), .fb_shown(fb_shown),
     .frame_t(frame_t), .show(fb_show),
+    .rpc_a(rpc_a), .rpc_we(rpc_we), .rpc_wd(rpc_wd), .rpc_rd(rpc_rd),
     .dbg_uart(), .dbg_uart_wr(), .cpu_run(),
     .MA(MA), .MD_I(MD), .MD_O(sram_do), .MD_OE_N(sram_oe_n), .MWR_N(MWR_N), .MRD_N(MRD_N)
 );
