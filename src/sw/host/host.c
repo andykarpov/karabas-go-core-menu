@@ -202,6 +202,7 @@ int main(int argc, char **argv) {
   settings_read();
   cores_read();
   browser_start();
+  msc_mode = 1; browser_msc_draw();              dump("00a_msc"); msc_mode = 0;
   browser_open();                                dump("00_browser");
   keys("l");                                     dump("00b_setup_focus");   // Left on the first core
   keys("r");                                     dump("00c_setup_unfocus");

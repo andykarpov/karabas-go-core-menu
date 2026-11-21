@@ -21,8 +21,8 @@ int main(void) {
   while (!rpc_enabled() && R_MS - t0 < 2000) ;
   if (rpc_enabled()) { settings_read(); cores_read(); dbg_puts("menu: cores read\n"); }
   else dbg_puts("menu: no RPC\n");
-  // the cards are USB drives of the PC (CFG and CORES busy): no colours of karabas.ini, black, not the blue defaults
-  if (cores_busy) look.gradient = look.bg;
+  // the cards are USB drives of the PC: the msc screen of the FT812 menu, until the firmware reboots
+  if (msc_mode) browser_msc();
   browser_start();
   uint32_t t_draw = R_US;
   browser_open();

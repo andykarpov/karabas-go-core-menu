@@ -14,6 +14,7 @@ int ncores = 0;
 char autoload_file[33];
 int autoload_s = 0;
 int cores_busy = 0;   // CORES answered busy: the cards are USB drives of the PC (MSC)
+int msc_mode = 0;     // SYS INFO: the USB drive mode, 0 none, 1 the SD card, 2 the second one, 3 it is not found
 char fw_build[9] = "";
 static int vis[MAX_CORES], nvis = 0;   // the visible cores: the list
 
@@ -58,6 +59,7 @@ void cores_read(void) {
   if (rpc_call(RPC_SYS, 0, 0, 0, buf, sizeof(buf), &n, 1000) == RPC_OK && n >= 8) {
     for (int i = 0; i < 8; i++) fw_build[i] = (char) buf[i];
     fw_build[8] = 0;
+    if (n >= 13) msc_mode = buf[12];
   }
 }
 
@@ -293,6 +295,43 @@ void browser_tick(void) {
     }
   }
   if (R_MS - t_clock >= 1000) { t_clock = R_MS; pointer_hide(); draw_clock(); pointer_show(); }
+}
+
+// ---- the USB drive mode (MSC) ----
+
+// the screen of app_msc_ft_draw of the FT812 menu: the background and the decor of the menu, the title and
+// the lines of the firmware's msc screen, nothing to choose; the firmware reboots when the PC ejects the card
+static const char *const msc_lines[3][6] = {
+  { "The SD card is connected to the", "PC as a USB drive.", "", "Eject it on the PC to return", "to the menu.", "" },
+  { "The second SD card (FPGA slot)", "is connected to the PC as a", "USB drive.", "", "Eject it on the PC to return",
+    "to the menu." },
+  { "The second SD card (FPGA slot)", "is not found.", "", "Back to the menu...", "", "" },
+};
+
+void browser_msc_draw(void) {
+  int m = msc_mode >= 1 && msc_mode <= 3 ? msc_mode - 1 : 0;
+  scr_begin();
+  look_apply();
+  draw_logo();
+  draw_character();
+  draw_clock();
+  ramp_t t = gfx_ramp_alpha(look.text);
+  int y = FB_H / 2 - 80;
+  gfx_text_center(&f30, FB_W / 2, y, "USB mass storage", t);
+  for (int i = 0; i < 6; i++) if (msc_lines[m][i][0]) gfx_text_center(&f28, FB_W / 2, y + 50 + i * 24, msc_lines[m][i], t);
+  scr_end();
+  dbg_puts("menu: msc screen\n");
+}
+
+void browser_msc(void) {
+  browser_msc_draw();
+  uint32_t t_clock = R_MS;
+  for (;;) {
+    key_ev_t e;
+    mouse_next();
+    key_next(&e);   // the keys do nothing here
+    if (R_MS - t_clock >= 1000) { t_clock = R_MS; pointer_hide(); draw_clock(); pointer_show(); }
+  }
 }
 
 // the list again after Setup (the sort or the visible cores may differ): the selected core kept

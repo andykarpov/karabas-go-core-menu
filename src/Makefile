@@ -35,10 +35,11 @@ JSON = core.json
 # 0.09 ns: audio_en_s -> the 5x shift registers). Since the FT812 is programmed again at the frequency of its last mode
 # (build 26102723) the Mini needs 2 (1 missed mini-coremode by 0.05 ns: dvi ENCODED_9 -> the 5x shift registers).
 # With the MIDI thru (build 26103114) the Mini G needs 3 (2 missed minig-coremode by 0.53 ns: dvi ENCODED_8 -> the
-# 5x shift registers).
+# 5x shift registers). Without menu_bg (build 26112118) the Mini G needs 2 (3 missed by 1.3 ns: the 5x shift register
+# -> the ODDR2 of its pad, a 4.9 ns route).
 MAP_T_go = 1
 MAP_T_mini = 2
-MAP_T_minig = 3
+MAP_T_minig = 2
 MAP_OPT = -logic_opt off -ol high -xe n -xt 0 -register_duplication off -r 4 -global_opt off -mt 2 -detail -ir off -pr b -lc off -power off
 PAR_OPT = -ol high -xe n -mt 4
 

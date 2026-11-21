@@ -10,5 +10,6 @@ extern int ncores;
 extern char autoload_file[33];   // CORES AUTOLOAD: "" none
 extern int autoload_s;
 extern int cores_busy;           // CORES busy: the cards are USB drives of the PC
+extern int msc_mode;             // SYS INFO: the USB drive mode (0 none, 1 SD, 2 SD2, 3 SD2 not found)
 extern char fw_build[9];
 void cores_read(void);
