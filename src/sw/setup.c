@@ -52,7 +52,7 @@ static const char *error;
 static int hover = HIT_NONE;     // under the pointer at the last picture
 
 static const cpage_t *custom_page(void);
-extern const cpage_t page_wifi;   // wifi_page.c
+extern const cpage_t page_wifi, page_pad;   // wifi_page.c, pad_page.c
 
 static const page_t *cur_page(void) {
   static const page_t mx = { "System > Matrix effects", settings_mx_ids, 8 };   // settings_mx_len
@@ -703,17 +703,8 @@ static const char *clock_keys(void) { return "Up/Down: select   Enter: next / se
 
 static const cpage_t page_clock = { clock_open, clock_close, 0, 0, clock_draw, clock_key, clock_tick, clock_click, clock_hint, clock_keys };
 
-// ---- Wi-Fi and Gamepad: the next steps of Ф3 ----
-
-static void later_draw(int x, int y, int w, int h, int focused) {
-  (void) w; (void) h; (void) focused;
-  gfx_text_left(&f28, x + 16, y + 20, "Comes in the next step", gfx_ramp_alpha(look.copyright));
-}
-static const char *later_hint(void) { return ""; }
-static const cpage_t page_later = { 0, 0, 0, 0, later_draw, 0, 0, 0, later_hint, later_hint };
-
 static const cpage_t *custom_page(void) {
-  return tab == T_CLOCK ? &page_clock : tab == T_WIFI ? &page_wifi : tab == T_PAD ? &page_later : 0;
+  return tab == T_CLOCK ? &page_clock : tab == T_WIFI ? &page_wifi : tab == T_PAD ? &page_pad : 0;
 }
 
 void setup_tick(void) {

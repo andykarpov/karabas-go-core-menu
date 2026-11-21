@@ -20,6 +20,8 @@
 uint8_t host_fb[2][0x80000];
 static uint32_t regs[0x1000];
 static uint32_t now_ms = 1000;
+static int learn_calls = 0;
+void host_puts(const char *s) { fputs(s, stdout); }
 
 volatile uint32_t *host_reg(uint32_t off) {
   static uint32_t tmp;
@@ -122,6 +124,28 @@ int rpc_call(uint8_t svc, uint8_t fn, const void *in_, uint16_t in_len, void *ou
     for (int k = 0; k < 5; k++) { strcpy((char *) out + n, f[k]); n += strlen(f[k]) + 1; }
     *out_len = n; return RPC_OK;
   }
+  // HID: port 1 a pad with a driver ini, port 2 free; the learning goes a step a call
+  if (svc == RPC_HID && fn == 0) {
+    static const uint8_t p[] = { 1, 0x10, 0x08, 0x01, 0x00 };
+    int n = 0;
+    memcpy(out, p, 5); n = 5; strcpy((char *) out + n, "/joy/0810_0001.ini"); n += 19;
+    memset(out + n, 0, 6); n += 6;
+    *out_len = n; return RPC_OK;
+  }
+  if (svc == RPC_HID && fn == 2) { learn_calls = 0; return RPC_OK; }
+  if (svc == RPC_HID && fn == 4) return RPC_OK;
+  if (svc == RPC_HID && fn == 3) {
+    // the calls: select, rest, then the buttons a call each up to B (5 mapped), pressing B
+    int c = learn_calls++;
+    uint8_t st = c < 2 ? 1 : c < 4 ? 3 : 4, btn = c < 4 ? 0 : (c - 4 > 5 ? 5 : c - 4);
+    uint16_t mapped = (1 << btn) - 1;
+    uint8_t o[12] = { st, btn, (uint8_t) (btn - 1), 7, 0x10, 0x08, 0x01, 0x00, (uint8_t) mapped, (uint8_t) (mapped >> 8), 0, 0 };
+    memcpy(out, o, 12);
+    strcpy((char *) out + 12, "b3+");   // the rule of the last one
+    *out_len = 12 + 4 + 1;
+    out[16] = 0;
+    return RPC_OK;
+  }
   if (svc == RPC_CORES && fn == 3) { out[0] = 0; out[1] = 0; *out_len = 2; return RPC_OK; }
   return RPC_UNKNOWN;
 }
@@ -207,6 +231,12 @@ int main(int argc, char **argv) {
   // Clock: NTP sync
   keys("uu" "e" "dddd" "e"); run_ms(300);        dump("24_ntp_busy");
   run_ms(2500);                                  dump("25_ntp_done");
+  // Gamepad: the ports, the learning, the test
+  keys("x" "dd");             run_ms(600);       dump("26_pad_list");
+  keys("e" "e");              run_ms(1200);      dump("27_pad_learning");
+  keys("x" "r" "e");          regs[0x38 / 4] = 2 | 64 | (32 << 16);  run_ms(600);  dump("28_pad_test");
+  regs[0x38 / 4] = 0;
+  keys("x" "x");
   // Save: the changed values in one SET, then SAVE
   keys("xxx");                                   // back to the list (the hover runs left the page open)
   keys("serx" "dddddddd" "e");                   dump("18_saved");

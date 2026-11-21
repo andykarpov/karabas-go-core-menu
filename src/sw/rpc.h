@@ -2,7 +2,7 @@
 #pragma once
 #include <stdint.h>
 
-enum { RPC_SYS = 0, RPC_CFG = 1, RPC_CORES = 2 };
+enum { RPC_SYS = 0, RPC_CFG = 1, RPC_CORES = 2, RPC_HID = 3 };
 enum { RPC_OK = 0, RPC_UNKNOWN = 1, RPC_ARGS = 2, RPC_NOT_FOUND = 3, RPC_IO = 4, RPC_DENIED = 5, RPC_BUSY = 6,
        RPC_TIMEOUT = 255 };
 #define RPC_MAX 512
