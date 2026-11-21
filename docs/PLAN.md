@@ -76,6 +76,14 @@ memory map of the CPU has slots for the two ports, RPC FS stays in the spec.
   the CPU, the frame counter running, the keyboard report read. Test cores go to the card under
   another name until the release (user).
 
+- Ф1 DONE 2026-11-21 (core-menu 37507eb, modules feature/rpc e4c1cde, firmware feature/rpc):
+  kg_l2_rpc (target 08) + tests, firmware RPC server (SYS, CFG, CORES) + spec 5.9 (en / ru); on
+  Mini G with the feature/rpc firmware: the real core list over RPC, keys, LAUNCH of Atari 2600;
+  an old boot.kg with the new firmware works as before (its own menu). Mini G 40 % LUT, timing met.
+  The released firmware 26112021 was put back on the bench after the check. The fallback message
+  for an old boot.kg comes with Ф4 (the firmware menu goes then). Test builds run as `menutest.kg`
+  of type osd (CORES in its HELLO); a boot type core cannot be started by AT load.
+
 ## Open items
 
 - The menu resolution: 800 x 600 now; the FT modes of `ft_height()` go away.
