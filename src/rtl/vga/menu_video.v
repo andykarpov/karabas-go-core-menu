@@ -5,7 +5,8 @@
 
  The picture of the menu CPU: 800 x 600 at 60 Hz (the timing of vga_sync, clk_pix 40.91 MHz), a colour
  index per pixel from one of the two frame buffers in the SRAM (FB0_HW / FB1_HW, halfword addresses;
- two pixels a halfword, the even pixel in the low byte), through the palette (256 x 24 bit). After
+ two pixels a halfword, the even pixel in the low byte), through the palette (256 x { alpha 4, RGB 24 }:
+ menu_compose blends it over the background). After
  doom_video.v of karabas-go-core-doom.
 
  The buffer: fb_sel (clk_cpu, the MMIO FB register) is taken at the start of the vertical sync
@@ -15,8 +16,9 @@
  during the last line of the frame; a toggle with the line to clk_cpu (menu_sram vid_* port, 400
  halfwords, about 11 us of the 25.8 us of a line). The other half holds the line being shown.
 
- Output: hs / vs / de with the polarity of vga_sync (high active, as the overlay wants them), rgb the
- colour of the frame buffer (show: the MMIO SHOW register; 0 when off), 4 clocks after the counters.
+ Output: hs / vs / de with the polarity of vga_sync (high active, as the overlay wants them), rgba the
+ palette entry of the pixel (show: the MMIO SHOW register; 0 = transparent when off), 4 clocks after
+ the counters.
 */
 module menu_video #(
 	parameter [20:0] FB0_HW = 21'h180000,    // byte 0x300000
@@ -31,14 +33,14 @@ module menu_video #(
 	input wire [15:0] vid_wd,
 	input wire pal_we,
 	input wire [7:0] pal_wa,
-	input wire [23:0] pal_wd,
+	input wire [27:0] pal_wd,
 	input wire show,                       // clk_cpu
 	input wire fb_sel,                     // clk_cpu
 	output wire fb_shown,                  // clk_cpu
 	output wire frame_t,                   // clk_cpu
 
 	input wire clk_pix,
-	output reg [23:0] rgb = 24'd0,
+	output reg [27:0] rgba = 28'd0,
 	output reg show_o = 1'b0,              // the frame buffer is on (with rgb)
 	output reg hs = 1'b0,
 	output reg vs = 1'b0,
@@ -105,9 +107,9 @@ kg_sdpram #(.DW(16), .AW(10)) linebuf (
 	.clkb(clk_pix), .enb(1'b1), .addrb(lb_ra), .doutb(lb_q)
 );
 
-wire [23:0] pal_q;
+wire [27:0] pal_q;
 reg [7:0] pal_ra = 8'd0;
-kg_sdpram #(.DW(24), .AW(8)) palette (
+kg_sdpram #(.DW(28), .AW(8)) palette (
 	.clka(clk_cpu), .wea(pal_we), .addra(pal_wa), .dina(pal_wd),
 	.clkb(clk_pix), .enb(1'b1), .addrb(pal_ra), .doutb(pal_q)
 );
@@ -129,7 +131,7 @@ always @(posedge clk_pix) begin
 	vis <= { vis[2:0], vis0 };
 	hsd <= { hsd[2:0], h > H_SYNC_ON && h <= H_SYNC_OFF };
 	vsd <= { vsd[2:0], v > V_SYNC_ON && v <= V_SYNC_OFF };
-	rgb <= (vis[3] && show_p) ? pal_q : 24'd0;
+	rgba <= (vis[3] && show_p) ? pal_q : 28'd0;
 	show_o <= show_p;
 	de <= vis[3];
 	hs <= hsd[3];

@@ -11,17 +11,22 @@ all: ../roms/menu.bin
 	mkdir -p ../roms
 	cp $< $@
 
-$(B)/%.o: %.c mmio.h font8.h rpc.h | $(B)
+$(B)/%.o: %.c mmio.h rpc.h gfx.h font.h fonts_gen.h images_gen.h | $(B)
 	$(CROSS)gcc $(CFLAGS) -c $< -o $@
 $(B)/%.o: %.S | $(B)
 	$(CROSS)gcc $(CFLAGS) -c $< -o $@
-$(B)/menu.elf: $(B)/crt0.o $(B)/main.o $(B)/rpc.o link.ld
-	$(CROSS)gcc $(CFLAGS) -nostdlib -nostartfiles -T link.ld -Wl,--gc-sections -o $@ $(B)/crt0.o $(B)/main.o $(B)/rpc.o -lgcc
+$(B)/menu.elf: $(B)/crt0.o $(B)/main.o $(B)/rpc.o $(B)/gfx.o link.ld
+	$(CROSS)gcc $(CFLAGS) -nostdlib -nostartfiles -T link.ld -Wl,--gc-sections -o $@ $(B)/crt0.o $(B)/main.o $(B)/rpc.o $(B)/gfx.o -lgcc
 	$(CROSS)size $@
 $(B)/menu.bin: $(B)/menu.elf
 	$(CROSS)objcopy -O binary $< $@
 $(B):
 	mkdir -p $(B)
+# the generated sources (committed): fonts from Noto Sans, the pictures of the firmware
+fonts:
+	python3 tools/mkfonts.py fonts_gen.h
+images:
+	python3 tools/mkimages.py ../../../karabas-go-firmware/src/ui/bitmaps.h images_gen.h
 clean:
 	rm -rf $(B)
-.PHONY: all clean
+.PHONY: all clean fonts images

@@ -17,6 +17,8 @@
      08 R  FRAMES: frames begun (the start of the vertical sync)
      0c R  CYCLES: clocks since the CPU started (low 32)
      10 W  SHOW: bit 0 the frame buffer on the screen (0: the background of the old menu)
+     18 W  GRAD_TOP: 0x00RRGGBB, the top colour of the background gradient (menu_compose)
+     20 W  GRAD_BOT: 0x00RRGGBB, its bottom colour (3/4 of the height and below)
      14 W  LAUNCH: the RPC call written (CORES LAUNCH) is made after the clear of the SRAM: the CPU
            stops for good, the SRAM is cleared (the next core starts with clean memory), then the call
            goes to the firmware, which replaces the core
@@ -26,7 +28,8 @@
      34 R  MOUSE: bits 31..24 buttons, 23..12 dy sum, 11..0 dx sum (signed, saturated; reading clears)
      38 R  JOY: { joy_r, joy_l }
      40 R  US: microseconds since the CPU started
-     400..7fc W  PAL: palette entry ((a - 400) / 4) = 0x00RRGGBB
+     400..7fc W  PAL: palette entry ((a - 400) / 4) = 0xARRGGBB: alpha 0..15 in bits 31..28 over the
+                 background (0 transparent, 15 opaque)
      2000..3ffc  RPC: byte (a - 2000) / 4 of the mailbox of kg_l2_rpc (kg_mcu2 RPC_*), in the low byte
                  of a word (map in kg_l2_rpc.v: request 000.., response 200.., event 400.., registers 600..)
  Instruction fetch and data share the SRAM (the data first); an owner keeps it to the last ack of its
@@ -74,7 +77,9 @@ module menu_soc #(
 	output wire [15:0] vid_wd,
 	output reg pal_we = 1'b0,
 	output reg [7:0] pal_wa = 8'd0,
-	output reg [23:0] pal_wd = 24'd0,
+	output reg [27:0] pal_wd = 28'd0,
+	output reg [23:0] grad_top = 24'h0000C8,  // the FT812 defaults of the firmware
+	output reg [23:0] grad_bot = 24'h000000,
 	output reg fb_sel = 1'b0,             // the buffer to show
 	input wire fb_shown,                  // the one shown (synchronised to clk)
 	input wire frame_t,                   // toggles at each frame (synchronised to clk)
@@ -314,11 +319,13 @@ always @(posedge clk) begin
 			if (io_off[11:10] == 2'b01) begin   // 0x400..0x7fc
 				pal_we <= 1'b1;
 				pal_wa <= io_off[9:2];
-				pal_wd <= d_dat_o[23:0];
+				pal_wd <= { d_dat_o[31:28], d_dat_o[23:0] };
 			end else case (io_off[7:0])
 				8'h00: begin dbg_uart <= d_dat_o[7:0]; dbg_uart_wr <= 1'b1; end
 				8'h04: fb_sel <= d_dat_o[0];
 				8'h10: show <= d_dat_o[0];
+				8'h18: grad_top <= d_dat_o[23:0];
+				8'h20: grad_bot <= d_dat_o[23:0];
 				8'h14: begin halted <= 1'b1; show <= 1'b0; launch_clr <= 1'b1; launch_wait <= 1'b1; end
 				default: ;
 			endcase

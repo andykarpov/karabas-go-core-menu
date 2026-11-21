@@ -387,7 +387,8 @@ wire [20:0] vid_adr;
 wire [8:0] vid_len, vid_wa;
 wire [15:0] vid_wd;
 wire [7:0] pal_wa;
-wire [23:0] pal_wd;
+wire [27:0] pal_wd;
+wire [23:0] grad_top, grad_bot;
 wire [15:0] sram_do, sram_oe_n;
 
 menu_soc soc (
@@ -397,7 +398,7 @@ menu_soc soc (
     .kbd(kbd), .kbd_wr(kbd_wr), .ms_x(ms_x), .ms_y(ms_y), .ms_b(ms_b), .ms_wr(ms_wr), .joy_l(joy_l), .joy_r(joy_r),
     .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
     .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .fb_sel(fb_sel), .fb_shown(fb_shown),
-    .frame_t(frame_t), .show(fb_show),
+    .frame_t(frame_t), .show(fb_show), .grad_top(grad_top), .grad_bot(grad_bot),
     .rpc_a(rpc_a), .rpc_we(rpc_we), .rpc_wd(rpc_wd), .rpc_rd(rpc_rd),
     .dbg_uart(), .dbg_uart_wr(), .cpu_run(),
     .MA(MA), .MD_I(MD), .MD_O(sram_do), .MD_OE_N(sram_oe_n), .MWR_N(MWR_N), .MRD_N(MRD_N)
@@ -409,32 +410,31 @@ end endgenerate
 
 //--------- video ---------
 // the frame buffer of the CPU (800 x 600, the timing of the old vga_sync), 4 clocks after its counters
-wire [23:0] fb_rgb;
+wire [27:0] fb_rgba;
 wire fb_on, vga_hs, vga_vs, vga_de;
 menu_video video (
     .clk_cpu(clk_cpu),
     .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
     .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .show(fb_show), .fb_sel(fb_sel), .fb_shown(fb_shown),
     .frame_t(frame_t),
-    .clk_pix(clk_sys), .rgb(fb_rgb), .show_o(fb_on), .hs(vga_hs), .vs(vga_vs), .de(vga_de)
+    .clk_pix(clk_sys), .rgba(fb_rgba), .show_o(fb_on), .hs(vga_hs), .vs(vga_vs), .de(vga_de)
 );
 
 //--------- background ---------
-// the glow of the FT812 menu behind the OSD (menu_bg: a gradient that breathes and drifts in tint), one clock
-// behind its syncs; the frame buffer of the CPU instead while it shows one
+// the glow of the old menu (menu_bg: a gradient that breathes and drifts in tint, one clock behind its syncs)
+// while the CPU shows nothing; else the FT812 gradient of menu_compose, the frame buffer blended over it
 wire [23:0] glow_rgb;
-wire bg_hs, bg_vs, bg_de;
 menu_bg background(
     .clk(clk_sys), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
-    .rgb_o(glow_rgb), .hs_o(bg_hs), .vs_o(bg_vs), .de_o(bg_de)
+    .rgb_o(glow_rgb), .hs_o(), .vs_o(), .de_o()
 );
-reg [23:0] fb_rgb_d = 24'd0;
-reg fb_on_d = 1'b0;
-always @(posedge clk_sys) begin
-    fb_rgb_d <= fb_rgb;
-    fb_on_d <= fb_on;
-end
-wire [23:0] bg_rgb = fb_on_d ? fb_rgb_d : glow_rgb;
+wire [23:0] bg_rgb;
+wire bg_hs, bg_vs, bg_de;
+menu_compose compose(
+    .clk(clk_sys), .rgba_i(fb_rgba), .show_i(fb_on), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
+    .glow_i(glow_rgb), .grad_top(grad_top), .grad_bot(grad_bot),
+    .rgb_o(bg_rgb), .hs_o(bg_hs), .vs_o(bg_vs), .de_o(bg_de)
+);
 
 //--------- OSD --------------
 // the screen of the menu is the bitmap OSD over the background, scale 2 (512 x 256 of 800 x 600);

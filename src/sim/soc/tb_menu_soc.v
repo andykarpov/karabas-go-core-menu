@@ -46,7 +46,10 @@ wire [20:0] vid_adr;
 wire [8:0] vid_len, vid_wa;
 wire [15:0] vid_wd;
 wire [7:0] pal_wa;
-wire [23:0] pal_wd;
+wire [27:0] pal_wd;
+wire [23:0] grad_top, grad_bot, glow;
+wire [27:0] rgba;
+wire v_hs, v_vs, v_de, v_show;
 wire [20:0] MA;
 wire [15:0] MD_O, MD_OE_N;
 wire [1:0] MWR_N, MRD_N;
@@ -65,7 +68,7 @@ menu_soc #(.CLR_LAST(21'h00FFFF)) soc (
 	.joy_l(16'd0), .joy_r(16'd0),
 	.vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
 	.pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .fb_sel(fb_sel), .fb_shown(fb_shown),
-	.frame_t(frame_t), .show(show),
+	.frame_t(frame_t), .show(show), .grad_top(grad_top), .grad_bot(grad_bot),
 	.rpc_a(rpc_a), .rpc_we(rpc_we), .rpc_wd(rpc_wd), .rpc_rd(rpc_rd),
 	.dbg_uart(dbg_uart), .dbg_uart_wr(dbg_uart_wr), .cpu_run(cpu_run),
 	.MA(MA), .MD_I(MD_I), .MD_O(MD_O), .MD_OE_N(MD_OE_N), .MWR_N(MWR_N), .MRD_N(MRD_N)
@@ -76,7 +79,17 @@ menu_video video (
 	.vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
 	.pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .show(show), .fb_sel(fb_sel), .fb_shown(fb_shown),
 	.frame_t(frame_t),
-	.clk_pix(clk_pix), .rgb(rgb), .show_o(show_o), .hs(hs), .vs(vs), .de(de)
+	.clk_pix(clk_pix), .rgba(rgba), .show_o(v_show), .hs(v_hs), .vs(v_vs), .de(v_de)
 );
+// the picture as the top makes it: the glow of menu_bg, menu_compose
+menu_bg background (.clk(clk_pix), .hs_i(v_hs), .vs_i(v_vs), .de_i(v_de), .rgb_o(glow), .hs_o(), .vs_o(), .de_o());
+menu_compose compose (
+	.clk(clk_pix), .rgba_i(rgba), .show_i(v_show), .hs_i(v_hs), .vs_i(v_vs), .de_i(v_de),
+	.glow_i(glow), .grad_top(grad_top), .grad_bot(grad_bot),
+	.rgb_o(rgb), .hs_o(hs), .vs_o(vs), .de_o(de)
+);
+reg [2:0] show_pipe = 3'd0;
+always @(posedge clk_pix) show_pipe <= { show_pipe[1:0], v_show };
+assign show_o = show_pipe[2];
 
 endmodule

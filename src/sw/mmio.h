@@ -8,6 +8,8 @@
 #define R_FRAMES MMIO(0x08) // R: frames begun
 #define R_CYCLES MMIO(0x0c) // R: clocks since the start
 #define R_SHOW   MMIO(0x10) // W: bit 0 the frame buffer on the screen
+#define R_GRAD_TOP MMIO(0x18) // W: the top colour of the background gradient
+#define R_GRAD_BOT MMIO(0x20) // W: its bottom colour (3/4 of the height and below)
 #define R_LAUNCH MMIO(0x14) // W: the SRAM is cleared, then the RPC call written is made (CORES LAUNCH)
 #define R_MS     MMIO(0x1c) // R: milliseconds since the start
 #define R_KBD0   MMIO(0x28) // R: { key 3, key 2, key 1, modifiers }
@@ -16,7 +18,7 @@
 #define R_MOUSE  MMIO(0x34) // R: buttons 31..24, dy 23..12, dx 11..0 (reading clears)
 #define R_JOY    MMIO(0x38) // R: { joy_r, joy_l }
 #define R_US     MMIO(0x40) // R: microseconds since the start
-#define R_PAL(i) MMIO(0x400 + 4 * (i)) // W: 0x00RRGGBB
+#define R_PAL(i) MMIO(0x400 + 4 * (i)) // W: 0xARRGGBB, alpha 0..15 (0 transparent, 15 opaque)
 
 // the mailbox of kg_l2_rpc: byte k at 0x80002000 + 4 k (low byte of a word)
 #define RPC(k)   MMIO(0x2000 + 4 * (k))

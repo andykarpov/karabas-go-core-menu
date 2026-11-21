@@ -122,8 +122,12 @@ static bool respond(uint8_t id, uint8_t st, const std::vector<uint8_t> &d) {
 }
 static void put_s(std::vector<uint8_t> &v, const char *s) { while (*s) v.push_back((uint8_t) *s++); v.push_back(0); }
 
-static const char *files[3] = { "a.kg", "b.kg", "c.kg" };
-static const char *names[3] = { "Alpha", "Bravo", "Charlie" };
+#define NCORES 15
+static const char *files[NCORES] = { "a.kg", "b.kg", "c.kg", "d.kg", "e.kg", "f.kg", "g.kg", "h.kg", "i.kg",
+  "j.kg", "k.kg", "l.kg", "m.kg", "n.kg", "o.kg" };
+static const char *names[NCORES] = { "Acorn Archimedes", "Agon", "Alf", "Amstrad CPC", "Apple //e", "Atari 2600",
+  "Atari 800XL", "Atari ST", "BBC Micro", "BK-0011M", "\xd0\xa1\xd0\xbf\xd0\xb5\xd1\x86\xd0\xb8\xd0\xb0\xd0\xbb\xd0\xb8\xd1\x81\xd1\x82",
+  "Commodore 64", "Doom", "MSX2", "ZX Spectrum Next" };
 static std::string launched;
 static int served = 0;
 
@@ -133,10 +137,29 @@ static void serve() {
   std::vector<uint8_t> out;
   uint8_t st = 0;
   served++;
-  if (r.svc == 2 && r.fn == 0) { out = { 3, 0 }; }
+  if (r.svc == 2 && r.fn == 0) { out = { NCORES, 0 }; }
+  else if (r.svc == 0 && r.fn == 0) { for (const char *c = "26112103"; *c; c++) out.push_back(*c); out.insert(out.end(), { 3, 1, 7, 0 }); }
+  else if (r.svc == 0 && r.fn == 1) { out = { 0xEA, 0x07, 11, 21, 2, 34, 22, 6 }; }  // 21/11/2026 02:34:22
+  else if (r.svc == 1 && r.fn == 0) {
+    // CFG GET file, section, key: TB_LOOK="key=value,key=value" gives [ft812] keys, the rest are not
+    // there (the defaults of the menu)
+    const char *key = (const char *) r.data.data() + 2 + strlen((const char *) r.data.data() + 2) + 1;
+    const char *look = getenv("TB_LOOK");
+    st = 3;
+    std::string k = std::string(key) + "=";
+    if (look) {
+      std::string l = std::string(",") + look + ",";
+      size_t at = l.find("," + k);
+      if (at != std::string::npos) {
+        size_t v = at + 1 + k.size(), e = l.find(',', v);
+        put_s(out, l.substr(v, e - v).c_str());
+        st = 0;
+      }
+    }
+  }
   else if (r.svc == 2 && r.fn == 1) {
     int i = r.data[0] | (r.data[1] << 8);
-    if (i < 3) { put_s(out, files[i]); put_s(out, names[i]); put_s(out, "26112101"); put_s(out, names[i]); put_s(out, "3"); }
+    if (i < NCORES) { put_s(out, files[i]); put_s(out, names[i]); put_s(out, "26112101"); put_s(out, names[i]); put_s(out, "3"); }
     else st = 3;
   }
   else if (r.svc == 2 && r.fn == 3) { out.push_back(0); put_s(out, ""); }
@@ -182,8 +205,8 @@ int main(int argc, char **argv) {
   while (n < limit && phase < 5) {
     if (t->l_irq) serve();
     cpu_clocks(200); n += 200;
-    if (phase == 0 && console.find("menu: cores read") != std::string::npos) { phase = 1; t_phase = n; }
-    else if (phase == 1 && n - t_phase > 3000000) { t->kbd = (uint64_t) 0x51 << 8; phase = 2; t_phase = n; }        // Down
+    if (phase == 0 && console.find("menu: drawn") != std::string::npos) { phase = 1; t_phase = n; }
+    else if (phase == 1 && n - t_phase > 300000) { t->kbd = (uint64_t) 0x51 << 8; phase = 2; t_phase = n; }        // Down
     else if (phase == 2 && n - t_phase > 600000) { t->kbd = 0; phase = 3; t_phase = n; cap_state = 1; }
     else if (phase == 3 && cap_state == 3 && n - t_phase > 600000) { t->kbd = (uint64_t) 0x28 << 8; phase = 4; t_phase = n; } // Enter
     else if (phase == 4 && !launched.empty()) phase = 5;
@@ -194,16 +217,18 @@ int main(int argc, char **argv) {
   if (console.find("menu: cores read") == std::string::npos) { printf("tb_menu_soc: the core list was not read\n"); errors++; }
   if (cap_state != 3) { printf("tb_menu_soc: no frame captured\n"); errors++; }
   else {
-    FILE *o = fopen("frame.ppm", "wb");
+    FILE *o = fopen(getenv("TB_FRAME") ? getenv("TB_FRAME") : "frame.ppm", "wb");
     fprintf(o, "P6 800 600 255\n");
     for (uint32_t p : frame) { fputc(p >> 16, o); fputc((p >> 8) & 255, o); fputc(p & 255, o); }
     fclose(o);
     int white = 0, selc = 0;
     for (uint32_t p : frame) { if (p == 0xffffff) white++; if (p == 0x2850d8) selc++; }
-    // the selection bar on the second row (Bravo after Down)
-    uint32_t bar = frame[(120 + 24 + 8) * 800 + 116];
+    // the button of the second core (Agon after Down) in the active colour 0x0000c8, the first in
+    // the button colour 0x202026 (the defaults of the firmware): a pixel left of the text
+    uint32_t b1 = frame[(88 + 16) * 800 + 220], b2 = frame[(88 + 40 + 16) * 800 + 220];
     if (white < 1000) { printf("tb_menu_soc: %d white pixels, no text\n", white); errors++; }
-    if (bar != 0x2850d8) { printf("tb_menu_soc: no selection on row 2 (%06x)\n", bar); errors++; }
+    if (b2 != 0x0000c8) { printf("tb_menu_soc: the second button is not active (%06x)\n", b2); errors++; }
+    if (b1 != 0x202026) { printf("tb_menu_soc: the first button is not a button (%06x)\n", b1); errors++; }
     printf("tb_menu_soc: frame.ppm, %d white, %d selection pixels\n", white, selc);
   }
   if (launched != "b.kg") { printf("tb_menu_soc: launched '%s', want b.kg\n", launched.c_str()); errors++; }
