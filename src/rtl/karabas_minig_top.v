@@ -329,11 +329,14 @@ wire [5:0] osd_pw;
 wire [31:0] port_out_data;
 wire [3:0] port_out_wr, port_in_full;
 
-// the ESP: its byte is held until the ack; taken when port 1 has room
-wire esp_in_wr = esp_uart_rx_wr && !port_in_full[1];
-assign esp_uart_rx_ack = esp_in_wr;
-assign esp_uart_tx_data = port_out_data[15:8];
-assign esp_uart_tx_wr = port_out_wr[1];
+// the ESP: its byte is held until the ack; taken when port 1 has room, or by the menu CPU while it
+// has the uart (esp_own: Setup > Wi-Fi, NTP sync; the MCU gets nothing meanwhile)
+wire esp_own, cpu_esp_ack, cpu_esp_wr;
+wire [7:0] cpu_esp_data;
+wire esp_in_wr = esp_uart_rx_wr && !port_in_full[1] && !esp_own;
+assign esp_uart_rx_ack = esp_own ? cpu_esp_ack : esp_in_wr;
+assign esp_uart_tx_data = esp_own ? cpu_esp_data : port_out_data[15:8];
+assign esp_uart_tx_wr = esp_own ? cpu_esp_wr : port_out_wr[1];
 // MIDI: the keyboard of PORT 2 and the sounds of the menu CPU, switched at whole messages
 wire [7:0] cpu_midi_data;
 wire cpu_midi_wr, cpu_midi_full, kb_midi_ready;
@@ -425,6 +428,8 @@ menu_soc soc (
     .frame_t(frame_t), .show(fb_show), .grad_top(grad_top), .grad_bot(grad_bot),
     .snd_out(snd_out), .snd_t(snd_t),
     .midi_data(cpu_midi_data), .midi_wr(cpu_midi_wr), .midi_full(cpu_midi_full),
+    .esp_rx_data(esp_uart_rx_data), .esp_rx_valid(esp_uart_rx_wr && esp_own), .esp_rx_ack(cpu_esp_ack),
+    .esp_tx_data(cpu_esp_data), .esp_tx_wr(cpu_esp_wr), .esp_own(esp_own),
     .rpc_a(rpc_a), .rpc_we(rpc_we), .rpc_wd(rpc_wd), .rpc_rd(rpc_rd),
     .dbg_uart(), .dbg_uart_wr(), .cpu_run(),
     .MA(MA), .MD_I(MD), .MD_O(sram_do), .MD_OE_N(sram_oe_n), .MWR_N(MWR_N), .MRD_N(MRD_N)

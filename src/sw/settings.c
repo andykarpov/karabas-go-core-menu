@@ -78,15 +78,33 @@ static uint8_t buf[RPC_MAX];
 
 // ---- CFG ----
 
-static int cfg_get(const char *section, const char *key, char *val, int max) {
-  char req[64], *p = req;
-  p = str_cpy(p, "0") + 1; p = str_cpy(p, section) + 1; p = str_cpy(p, key) + 1;
+// GET of several values: the pairs of settings[from..] that fit a request; their values (1 + value,
+// or 0 + "" when not in the file) into vals; returns the next id, -1 on an error
+static int cfg_get_many(int from, char vals[][40]) {
+  char req[RPC_MAX], *p = req;
+  int id = from;
+  p = str_cpy(p, "0") + 1;
+  for (; id < S_COUNT; id++) {
+    const setting_t *s = &settings[id];
+    if (!s->section) continue;
+    int len = str_len(s->section) + str_len(s->key) + 2;
+    if ((p - req) + len > RPC_MAX - 8 || (id - from) >= 20) break;   // the answer: 20 values of at most 24 chars
+    p = str_cpy(p, s->section) + 1; p = str_cpy(p, s->key) + 1;
+  }
   uint16_t n;
-  if (rpc_call(RPC_CFG, 0, req, (uint16_t) (p - req), buf, sizeof(buf), &n, 1000) != RPC_OK) return 0;
-  int i = 0;
-  for (; i < n && i < max - 1 && buf[i]; i++) val[i] = (char) buf[i];
-  val[i] = 0;
-  return 1;
+  if (rpc_call(RPC_CFG, 0, req, (uint16_t) (p - req), buf, sizeof(buf), &n, 2000) != RPC_OK) return -1;
+  const uint8_t *q = buf, *end = buf + n;
+  for (int k = from; k < id; k++) {
+    vals[k][0] = 0;
+    if (!settings[k].section) continue;
+    int found = q < end && *q++;
+    int i = 0;
+    while (q < end && *q) { if (i < 39) vals[k][i++] = (char) *q; q++; }
+    if (q < end) q++;
+    vals[k][i] = 0;
+    if (!found) vals[k][0] = 1;          // not in the file: the default
+  }
+  return id;
 }
 
 static void trim(char *s) {
@@ -143,21 +161,19 @@ static void core_find(void) {
 }
 
 void settings_read(void) {
-  char v[40];
+  static char vals[S_COUNT][40];
+  for (int id = 0; id < S_COUNT; id++) { set_val[id] = settings[id].def; vals[id][0] = 1; }
+  for (int id = 0; id >= 0 && id < S_COUNT; ) id = cfg_get_many(id, vals);
+  set_core[0] = 0;
   for (int id = 0; id < S_COUNT; id++) {
     const setting_t *s = &settings[id];
-    set_val[id] = s->def;
-    if (!s->section) continue;
-    if (id == S_CORE) {
-      set_core[0] = 0;
-      if (cfg_get(s->section, s->key, v, sizeof(v))) { trim(v); str_ncpy(set_core, v, sizeof(set_core)); }
-      continue;
-    }
-    if (!cfg_get(s->section, s->key, v, sizeof(v))) continue;
+    char *v = vals[id];
+    if (!s->section || v[0] == 1) continue;   // not in the file
     trim(v);
     int n;
     uint32_t c;
-    if (id == S_TZ) tz_parse(v, &set_val[id]);
+    if (id == S_CORE) str_ncpy(set_core, v, sizeof(set_core));
+    else if (id == S_TZ) tz_parse(v, &set_val[id]);
     else if (id == S_CORE_SORT) { for (int i = 0; i < 3; i++) if (str_ieq(v, core_sort_keys[i])) set_val[id] = i; }
     else if (s->kind == SK_BOOL) {
       if (str_ieq(v, "1") || str_ieq(v, "true") || str_ieq(v, "yes")) set_val[id] = 1;

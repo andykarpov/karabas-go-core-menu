@@ -143,7 +143,7 @@ static const char *names[NCORES] = { "Acorn Archimedes", "Agon", "Alf", "Amstrad
   "Atari 800XL", "Atari ST", "BBC Micro", "BK-0011M", "\xd0\xa1\xd0\xbf\xd0\xb5\xd1\x86\xd0\xb8\xd0\xb0\xd0\xbb\xd0\xb8\xd1\x81\xd1\x82",
   "Commodore 64", "Doom", "MSX2", "ZX Spectrum Next" };
 static std::string launched;
-static int served = 0;
+static int served = 0, cfg_calls = 0;
 
 static void serve() {
   req_t r;
@@ -154,26 +154,24 @@ static void serve() {
   if (r.svc == 2 && r.fn == 0) { out = { NCORES, 0 }; }
   else if (r.svc == 0 && r.fn == 0) { for (const char *c = "26112103"; *c; c++) out.push_back(*c); out.insert(out.end(), { 3, 1, 7, 0 }); }
   else if (r.svc == 0 && r.fn == 1) { out = { 0xEA, 0x07, 11, 21, 2, 34, 22, 6 }; }  // 21/11/2026 02:34:22
-  else if (r.svc == 1 && r.fn == 0 && !strcmp((const char *) r.data.data() + 2 + strlen((const char *) r.data.data() + 2) + 1, "sound") && !getenv("TB_SOUND")) {
-    put_s(out, "0");  // no start sound (1 s of it is too long for the run), but in the TB_SOUND run
-  }
   else if (r.svc == 1 && r.fn == 0) {
-    // CFG GET file, section, key: TB_LOOK="key=value,key=value" gives [ft812] keys, the rest are not
-    // there (the defaults of the menu)
-    const char *key = (const char *) r.data.data() + 2 + strlen((const char *) r.data.data() + 2) + 1;
+    // CFG GET file, (section, key)...: per pair 1 + value, or 0 + "" (not there: the defaults of the
+    // menu). TB_LOOK="key=value,key=value" gives keys of any section; [ft812] sound is 0 (1 s of the
+    // start sound is too long for the run) but in the TB_SOUND run
+    std::vector<std::string> a;
+    for (size_t p = 0; p < r.data.size(); p += strlen((const char *) r.data.data() + p) + 1) a.push_back((const char *) r.data.data() + p);
     const char *look = getenv("TB_LOOK");
-    st = 3;
-    std::string k = std::string(key) + "=";
-    if (look) {
-      std::string l = std::string(",") + look + ",";
-      size_t at = l.find("," + k);
-      if (at != std::string::npos) {
-        size_t v = at + 1 + k.size(), e = l.find(',', v);
-        put_s(out, l.substr(v, e - v).c_str());
-        st = 0;
-      }
+    std::string l = std::string(",") + (look ? look : "") + ",";
+    if (!getenv("TB_SOUND")) l += "sound=0,";
+    for (size_t k = 1; k + 1 < a.size(); k += 2) {
+      size_t at = l.find("," + a[k + 1] + "=");
+      if (at == std::string::npos) { out.push_back(0); out.push_back(0); continue; }
+      size_t v = at + a[k + 1].size() + 2, e = l.find(',', v);
+      out.push_back(1);
+      put_s(out, l.substr(v, e - v).c_str());
     }
   }
+  else if (r.svc == 1) { cfg_calls++; }   // SET, SAVE, PREVIEW: ok
   else if (r.svc == 2 && r.fn == 1) {
     int i = r.data[0] | (r.data[1] << 8);
     if (i < NCORES) { put_s(out, files[i]); put_s(out, names[i]); put_s(out, "26112101"); put_s(out, names[i]); put_s(out, "3"); }

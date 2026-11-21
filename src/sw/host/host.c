@@ -68,11 +68,16 @@ int rpc_call(uint8_t svc, uint8_t fn, const void *in_, uint16_t in_len, void *ou
     memcpy(out, t, 8); *out_len = 8; return RPC_OK;
   }
   if (svc == RPC_SYS && fn == 2) return RPC_OK;
-  if (svc == RPC_CFG && fn == 0) {
-    const char *sec = arg(in, in_len, 1), *key = arg(in, in_len, 2);
-    for (unsigned i = 0; i < sizeof(ini) / sizeof(ini[0]); i++)
-      if (!strcmp(ini[i][0], sec) && !strcmp(ini[i][1], key)) { strcpy((char *) out, ini[i][2]); *out_len = strlen(ini[i][2]) + 1; return RPC_OK; }
-    return RPC_NOT_FOUND;
+  if (svc == RPC_CFG && fn == 0) {   // GET (section, key)... -> 1 + value / 0 + ""
+    int n = 0;
+    for (int k = 1; arg(in, in_len, k) && arg(in, in_len, k + 1); k += 2) {
+      const char *sec = arg(in, in_len, k), *key = arg(in, in_len, k + 1), *v = 0;
+      for (unsigned i = 0; i < sizeof(ini) / sizeof(ini[0]); i++)
+        if (!strcmp(ini[i][0], sec) && !strcmp(ini[i][1], key)) v = ini[i][2];
+      out[n++] = v ? 1 : 0;
+      strcpy((char *) out + n, v ? v : ""); n += strlen(v ? v : "") + 1;
+    }
+    *out_len = n; return RPC_OK;
   }
   if (svc == RPC_CFG) {
     printf("CFG %u:", fn);
@@ -163,5 +168,8 @@ int main(int argc, char **argv) {
   keys("s");
   ptr.visible = 1; ptr.x = 80; ptr.y = 88 + 40 + 10; setup_mouse(M_MOVED); dump("16_hover_tab");
   keys("de"); ptr.x = 400; ptr.y = 128 + 36 + 10; setup_mouse(M_MOVED); dump("17_hover_row");
+  // Save: the changed values in one SET, then SAVE
+  keys("xxx");                                   // back to the list (the hover runs left the page open)
+  keys("serx" "dddddddd" "e");                   dump("18_saved");
   return 0;
 }

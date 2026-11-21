@@ -34,6 +34,9 @@
                  R playing), channel 1 at 0x90
      a0 W  MIDI: a byte to the SAM2695 (menu_midi_mux, whole messages with their status); R bit 0
            its fifo is full
+     a4 W  ESP: a byte to the ESP8266 (the 256 byte fifo of esp8266.vhd: at most that much before an
+           answer); R bit 8 a byte of the ESP is there, bits 7..0 the byte (reading takes it)
+     a8 W/R  ESP_OWN: bit 0 the CPU has the uart of the ESP (else it goes to the MCU, PORT 1)
      400..bfc W  PAL: bank (a - 400) / 1024 (the palette of frame buffer 0 / 1), entry ((a - 400) / 4) % 256 = 0xARRGGBB: alpha 0..15 in bits 31..28 over the
                  background (0 transparent, 15 opaque)
      2000..3ffc  RPC: byte (a - 2000) / 4 of the mailbox of kg_l2_rpc (kg_mcu2 RPC_*), in the low byte
@@ -97,6 +100,14 @@ module menu_soc #(
 	output reg [7:0] midi_data = 8'd0,
 	output reg midi_wr = 1'b0,
 	input wire midi_full,
+
+	// the ESP8266 (esp8266.vhd): its uart while esp_own, else the MCU has it (the top)
+	input wire [7:0] esp_rx_data,
+	input wire esp_rx_valid,
+	output reg esp_rx_ack = 1'b0,
+	output reg [7:0] esp_tx_data = 8'd0,
+	output reg esp_tx_wr = 1'b0,
+	output reg esp_own = 1'b0,
 
 	// RPC (kg_mcu2 RPC_*)
 	output reg [10:0] rpc_a = 11'd0,
@@ -293,6 +304,8 @@ always @(posedge clk) begin
 	rpc_we <= 1'b0;
 	snd_wr <= 1'b0;
 	midi_wr <= 1'b0;
+	esp_rx_ack <= 1'b0;
+	esp_tx_wr <= 1'b0;
 	launch_clr <= 1'b0;
 	launch_call <= 1'b0;
 	if (launch_wait && !clr_req && !clr_busy && !launch_clr) begin
@@ -362,6 +375,8 @@ always @(posedge clk) begin
 			end else case (io_off[7:0])
 				8'h00: begin dbg_uart <= d_dat_o[7:0]; dbg_uart_wr <= 1'b1; end
 				8'ha0: begin midi_data <= d_dat_o[7:0]; midi_wr <= 1'b1; end
+				8'ha4: begin esp_tx_data <= d_dat_o[7:0]; esp_tx_wr <= 1'b1; end
+				8'ha8: esp_own <= d_dat_o[0];
 				8'h04: fb_sel <= d_dat_o[0];
 				8'h10: show <= d_dat_o[0];
 				8'h18: grad_top <= d_dat_o[23:0];
@@ -394,6 +409,8 @@ always @(posedge clk) begin
 				8'h8c: io_dat <= { 23'd0, snd_playing[0], 8'd0 };
 				8'h9c: io_dat <= { 23'd0, snd_playing[1], 8'd0 };
 				8'ha0: io_dat <= { 31'd0, midi_full };
+				8'ha4: begin io_dat <= { 23'd0, esp_rx_valid, esp_rx_data }; esp_rx_ack <= esp_rx_valid; end
+				8'ha8: io_dat <= { 31'd0, esp_own };
 				default: io_dat <= 32'd0;
 			endcase
 		end

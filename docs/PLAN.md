@@ -105,6 +105,20 @@ memory map of the CPU has slots for the two ports, RPC FS stays in the spec.
   Cowbell on the SAM2695 (menu_midi_mux; heard on the board). The bench keeps the feature/rpc
   firmware until the release (user), its karabas.ini has [ft812] sound=1 now (user).
 
+- Ф3 decisions (user, 2026-11-21): the FT-only rows (Graphic menu, Video mode, 3D buttons) are
+  dropped from Setup (their karabas.ini keys stay); System > Matrix effects keeps the live preview on
+  the LED matrix (RPC CFG PREVIEW); no About page.
+
+- Ф3 step 1 (3a611e5 and after, sim + host frames; on the board next): Setup on the CPU: the
+  sections, the settings pages, the colour editor, the drop dialog, the Clock page (date / time
+  fields, time zone, Set over SYS TIME_SET; NTP sync comes with Wi-Fi). The geometry of
+  app_ft_setup.c, checked against grabs of the FT812 setup on the bench (docs/img/f3_compare.png:
+  left the FT812, right the CPU; f3_new_screens.png). A palette bank per frame buffer (menu_video):
+  a picture is drawn into the buffer not shown with its own colours, then shown. The ESP uart
+  can go to the CPU (MMIO ESP / ESP_OWN, for the Wi-Fi page). Firmware: CFG GET / SET of several
+  values a call (one read / one rewrite of karabas.ini), SAVE re-applies the matrix, PREVIEW.
+  `src/sw/host/run.sh` draws the screens on the host (a fake firmware) for quick frames.
+
 ## Open items
 
 - The menu resolution: 800 x 600 now; the FT modes of `ft_height()` go away.
