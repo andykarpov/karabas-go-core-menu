@@ -54,6 +54,22 @@ master before it.
 | Ф4 | The boot UI removed from the firmware; Go and Mini builds; **release of the minimal version** | sims, the three boards, one PR per repo |
 | Ф5 | Later iterations: two-panel file manager (copy / move / delete between the cards, see below), RPC FS (generic, sandboxed) + the guide for other cores | UI approval, hw |
 
+## Ф4: what leaves the firmware (user, 2026-11-21: the FT812 menu is not needed any more)
+
+- Both menus of the boot core go: the FT812 one (app_core_browser FT part, app_ft_setup, app_ft_clock,
+  app_ft_wifi, app_ft_pad, ui/ft_page, ui/ft_mouse, the FT sounds / bitmaps, the FT detection at the
+  boot core start with its Space fallback, ft_init and the video modes) and the text one (the core
+  browser and Setup screens of the OSD: app_setup, app_settings, app_rtc, app_wifi, app_pad_mapper,
+  app_about as far as only the boot core uses them). What the menu CPU does now over RPC stays in
+  the firmware as services (the core list, karabas.ini, the RTC, pad_learn, the matrix).
+- Stays: the FT812 reset pin and the bus control (ft_begin / ft_reset before a core: cores drive the
+  FT812 themselves), the OSD of the other cores, MSC, the AT+KARABAS control.
+- karabas.ini keeps its [ft812] section (the look of the CPU menu reads it); enabled, video_mode and
+  3d_buttons become unused (left in the file, not written).
+- An old boot.kg (no RPC in its caps) with the new firmware: a message and the MSC hint only.
+- Check what AT+KARABAS commands open firmware screens (at_control.c "ft_setup", "wifi", "rtc",
+  "settings") and what the hands-free tests of other repos use.
+
 ## Ф5: two-panel file manager (later, after the minimal release)
 
 Drives of the CPU, one VFS in C (FatFs, BSD-style licence) over three back ends:
