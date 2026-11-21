@@ -262,3 +262,11 @@ void gfx_text_right(const font_t *f, int rx, int cy, const char *s, ramp_t ramp)
 void gfx_text_left(const font_t *f, int x, int cy, const char *s, ramp_t ramp) {
   gfx_text(f, x, cy - f->line / 2, s, ramp);
 }
+
+void gfx_arc_top(int cx, int cy, int r, ramp_t ramp) {
+  for (int y = cy - r - 1; y <= cy; y++)
+    for (int x = cx - r - 1; x <= cx + r; x++) {
+      int c = disc_cov(x * 4, y * 4, cx * 4, cy * 4, r * 4) - disc_cov(x * 4, y * 4, cx * 4, cy * 4, r * 4 - 8);
+      if (c > 0) pset(x, y, (uint8_t) (ramp + c - 1));
+    }
+}

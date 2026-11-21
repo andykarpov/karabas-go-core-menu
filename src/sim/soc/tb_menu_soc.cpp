@@ -59,8 +59,34 @@ static void step() {
 }
 
 // one rising edge of clk_cpu (the inputs set before it are taken at it)
+// a fake ESP8266 (TB_WIFI): AT 1.7.6, joined; replies at the uart rate are not modelled (at once)
+static std::string esp_cmd, esp_out;
+static size_t esp_at = 0;
+static int esp_cmds = 0;
+static void esp_model() {
+  if (t->esp_tx_wr) {
+    char c = (char) t->esp_tx_data;
+    if (c == '\n') {
+      if (!esp_cmd.empty() && esp_cmd.back() == '\r') esp_cmd.pop_back();
+      esp_cmds++;
+      if (esp_cmd == "AT+GMR") esp_out += "AT version:1.7.6.0(Jan 24 2022 08:56:02)\r\n";
+      else if (esp_cmd == "AT+UART_DEF?") esp_out += "+UART_DEF:115200,8,1,0,2\r\n";
+      else if (esp_cmd == "AT+CWMODE?") esp_out += "+CWMODE:1\r\n";
+      else if (esp_cmd == "AT+CWJAP?") esp_out += "+CWJAP:\"TestNet\",\"aa:bb:cc:dd:ee:ff\",6,-52\r\n";
+      else if (esp_cmd == "AT+CIFSR") esp_out += "+CIFSR:STAIP,\"10.0.0.7\"\r\n";
+      esp_out += "\r\nOK\r\n";
+      esp_cmd.clear();
+    } else esp_cmd += c;
+  }
+  if (t->esp_rx_ack) esp_at++;
+  t->esp_rx_wr = esp_at < esp_out.size();
+  t->esp_rx_data = esp_at < esp_out.size() ? (uint8_t) esp_out[esp_at] : 0;
+}
+
+static void esp_model();
 static void cpu_clock() {
   do step(); while (!(t->clk_cpu && now_ps == next_cpu - P_CPU / 2));
+  esp_model();
 }
 static void cpu_clocks(int n) { for (int i = 0; i < n; i++) cpu_clock(); }
 
@@ -238,6 +264,7 @@ int main(int argc, char **argv) {
   int phase = 0; // 0 until the list is drawn, 1 Down pressed, 2 released, 3 Enter, 4 launched
   uint64_t t_phase = 0;
   bool setup_done = false;
+  int wifi_k = 0;
   std::vector<uint32_t> setup_frame;
   while (n < limit && phase != 5) {
     if (t->l_irq) serve();
@@ -260,6 +287,21 @@ int main(int argc, char **argv) {
         clicks++; t_phase = n; printf("tb_menu_soc: click %d at %llu\n", clicks, (unsigned long long) n);
       } else phase = 4;
     }
+    // TB_WIFI: S, Down x 6 (the Wi-Fi section): the status is asked over the uart of the ESP (the
+    // model above), a frame of it
+    else if (phase == 1 && getenv("TB_WIFI") && n - t_phase > 300000) { phase = 30; wifi_k = 0; t_phase = n; }
+    else if (phase == 30 && n - t_phase > 600000) {
+      static const uint8_t ks[7] = { 0x16, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51 };
+      // a press, held until the picture of it is drawn, then the release
+      static size_t drawn = 0;
+      size_t d = 0;
+      for (size_t p = console.find("menu: setup drawn"); p != std::string::npos; p = console.find("menu: setup drawn", p + 1)) d++;
+      if (wifi_k < 14 && !(wifi_k & 1)) { t->kbd = (uint64_t) ks[wifi_k / 2] << 8; wifi_k++; drawn = d; t_phase = n; }
+      else if (wifi_k < 14 && d > drawn) { t->kbd = 0; wifi_k++; t_phase = n; }
+      else if (console.find("ESP << +CIFSR") != std::string::npos) { phase = 31; t_phase = n; }
+    }
+    else if (phase == 31 && n - t_phase > 6000000) { cap_state = 1; phase = 32; }
+    else if (phase == 32 && cap_state == 3) phase = 5;
     // TB_SETUP: S opens Setup (drawn into the other buffer, its own palette), a frame of it, Esc back
     // to the list (drawn again), then on as the key run
     else if (phase == 1 && getenv("TB_SETUP") && !setup_done && n - t_phase > 300000) { t->kbd = (uint64_t) 0x16 << 8; phase = 7; t_phase = n; }
@@ -295,7 +337,7 @@ int main(int argc, char **argv) {
     // the button colour 0x202026 (the defaults of the firmware): a pixel left of the text
     uint32_t b1 = frame[(88 + 16) * 800 + 220], b2 = frame[(88 + 40 + 16) * 800 + 220];
     if (white < 1000) { printf("tb_menu_soc: %d white pixels, no text\n", white); errors++; }
-    if (getenv("TB_MOUSE")) b1 = 0x202026, b2 = 0x0000c8;  // the frame is before the clicks: not checked
+    if (getenv("TB_MOUSE") || getenv("TB_WIFI")) b1 = 0x202026, b2 = 0x0000c8;   // not the list  // the frame is before the clicks: not checked
     if (b2 != 0x0000c8) { printf("tb_menu_soc: the second button is not active (%06x)\n", b2); errors++; }
     if (b1 != 0x202026) { printf("tb_menu_soc: the first button is not a button (%06x)\n", b1); errors++; }
     printf("tb_menu_soc: frame.ppm, %d white, %d selection pixels\n", white, selc);
@@ -310,6 +352,10 @@ int main(int argc, char **argv) {
     fprintf(o, "P6 800 600 255\n");
     for (uint32_t p : setup_frame) { fputc(p >> 16, o); fputc((p >> 8) & 255, o); fputc(p & 255, o); }
     fclose(o);
+  }
+  if (getenv("TB_WIFI")) {
+    printf("tb_menu_soc: %d AT commands to the ESP\n", esp_cmds);
+    if (esp_cmds < 6 || console.find("ESP << +CWJAP:\"TestNet\"") == std::string::npos) { printf("tb_menu_soc: no Wi-Fi status\n"); errors++; }
   }
   const char *want = getenv("TB_MOUSE") ? "d.kg" : "b.kg";  // the pointer is on the fourth core
   // the click of Down / the mouse: Cowbell on channel 10, on and off
@@ -348,6 +394,7 @@ int main(int argc, char **argv) {
     if (bad > 100 || cmp < 1000) { printf("tb_menu_soc: the sound is not sound 1\n"); errors++; }
     want = "";  // the run ends in the sound, before the launch
   }
+  if (getenv("TB_WIFI")) want = "";   // the run ends on the Wi-Fi page
   if (launched != want) { printf("tb_menu_soc: launched '%s', want %s\n", launched.c_str(), want); errors++; }
   else printf("tb_menu_soc: LAUNCH %s after the clear\n", launched.c_str());
   printf("tb_menu_soc: %d errors\n", errors);

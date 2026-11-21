@@ -5,6 +5,9 @@
 // section opens it, on a setting picks it (and does Enter when it is picked), on a toggle or an
 // arrow changes it; the sliders of a colour follow a drag; the right button is Esc.
 #include "setup.h"
+#include "setup_ui.h"
+#include "esp.h"
+#include "ntp.h"
 #include "settings.h"
 #include "browser.h"
 #include "cores.h"
@@ -15,7 +18,7 @@
 enum { T_SYSTEM, T_AUTOLOAD, T_DISPLAY, T_SOUND, T_THEME, T_PAGES, T_CLOCK = T_PAGES, T_WIFI, T_PAD, T_SAVE, T_CANCEL, T_COUNT };
 enum { F_TABS, F_PAGE, F_COLOR, F_DIALOG, F_CUSTOM };
 enum { HIT_TAB = 100, HIT_ROW = 200, HIT_TOGGLE = 300, HIT_LESS = 400, HIT_MORE = 500,
-       HIT_CHAN = 600, HIT_SLIDER = 700, HIT_DLG_LEFT = 800, HIT_DLG_RIGHT, HIT_PANEL = 900, HIT_PAGE = 1000 };
+       HIT_CHAN = 600, HIT_SLIDER = 700, HIT_DLG_LEFT = 800, HIT_DLG_RIGHT, HIT_PANEL = 900 };
 
 typedef struct { const char *name; const uint8_t *ids; uint8_t len; } page_t;
 static const uint8_t page_system[] = { S_DEBUG, S_DVI, S_CORE_SORT, S_MATRIX, S_MATRIX_BRIGHT, S_MX_EFFECTS };
@@ -33,7 +36,6 @@ static const char *const tab_names[T_COUNT] = { "System", "Autoload", "Display",
 #define TOP 88
 #define TAB_X 16
 #define TAB_W 160
-#define TAB_H 32
 #define TAB_STEP 40
 #define TAB_GAP 12               // before Save
 #define PANEL_X (TAB_X + TAB_W + 16)
@@ -42,9 +44,6 @@ static const char *const tab_names[T_COUNT] = { "System", "Autoload", "Display",
 #define ROW_STEP 36
 #define VALUE_W 200              // '<', the value of a choice, '>'
 #define COLOR_STEP 8
-#define ERROR_COLOR 0xff4040
-#define OK_COLOR 0x40d040
-#define CURSOR_COLOR 0x00d8d8
 
 int setup_active = 0;
 static int focus, tab, row, mx_page, dialog_left, color_ch, dragging;
@@ -52,18 +51,8 @@ static uint32_t color_old;
 static const char *error;
 static int hover = HIT_NONE;     // under the pointer at the last picture
 
-// ---- the custom pages ----
-typedef struct {
-  void (*open)(void);
-  void (*close)(void);
-  void (*draw)(int x, int y, int w, int focused);
-  int (*key)(const key_ev_t *e);       // 0: back to the sections
-  int (*tick)(void);                   // 1: draw again
-  void (*click)(int id);               // id of the page (HIT_PAGE + id)
-  const char *(*hint)(void);
-  const char *(*keys)(void);
-} cpage_t;
 static const cpage_t *custom_page(void);
+extern const cpage_t page_wifi;   // wifi_page.c
 
 static const page_t *cur_page(void) {
   static const page_t mx = { "System > Matrix effects", settings_mx_ids, 8 };   // settings_mx_len
@@ -75,17 +64,17 @@ static int tab_y(int i) { return TOP + i * TAB_STEP + (i >= T_SAVE ? TAB_GAP : 0
 // ---- widgets (the FT812 commands of the firmware) ----
 
 // ft_draw_rect: line width r, so the rectangle grows by r on each side
-static void ft_rect(int x, int y, int w, int h, int r, uint32_t c, int32_t surface) {
+void ft_rect(int x, int y, int w, int h, int r, uint32_t c, int32_t surface) {
   gfx_round_rect(x - r, y - r, w + 2 * r, h + 2 * r, r, gfx_ramp(c, surface));
 }
-static void button(int x, int y, int w, int h, const font_t *f, uint32_t fg, uint32_t bg, int32_t surface, const char *label) {
+void button(int x, int y, int w, int h, const font_t *f, uint32_t fg, uint32_t bg, int32_t surface, const char *label) {
   gfx_round_rect(x, y, w, h, 4, gfx_ramp(bg, surface));
   gfx_text_center(f, x + w / 2, y + h / 2, label, gfx_ramp_over(fg, bg));
 }
-static void hover_frame(int x, int y, int w, int h) {
+void hover_frame(int x, int y, int w, int h) {
   gfx_round_rect(x - 2, y - 2, w + 4, h + 4, 6, gfx_ramp_alpha(look.active));
 }
-static void marker(int x, int y, int h, uint32_t surface) {
+void marker(int x, int y, int h, uint32_t surface) {
   gfx_circle(x + 9, y + h / 2, 3, gfx_ramp_over(look.active, surface));
 }
 static void toggle(int x, int cy, int w, int on, int32_t surface) {
@@ -106,7 +95,7 @@ static void title(const char *t) {
   gfx_fill(PANEL_X + 16, TOP + 35, PANEL_W - 32, 1, gfx_ramp_alpha(look.copyright) + 6);
 }
 // the row of a setting: focused (the marker) or hovered, on the button colour
-static int32_t row_back(int x, int y, int w, int h, int focused, int hovered) {
+int32_t row_back(int x, int y, int w, int h, int focused, int hovered) {
   if (!focused && !hovered) return GFX_ALPHA;
   ft_rect(x, y, w, h, 4, look.button, GFX_ALPHA);
   if (focused) marker(x, y, h, look.button);
@@ -236,7 +225,9 @@ static void draw_footer(void) {
   gfx_text_left(&f27, TAB_X, FB_H - 20, keys, gfx_ramp_alpha(look.copyright));
 }
 
+static void track_tab(void);
 static void draw(void) {
+  track_tab();
   pointer_hide();
   scr_begin();
   look_apply();
@@ -251,7 +242,7 @@ static void draw(void) {
     title(tab_names[tab]);
     int y = TOP + 40, focused = focus == F_CUSTOM;
     if (!focused) hit_add(PANEL_X, y, PANEL_W, FB_H - 56 - y, HIT_PANEL);   // a click opens it
-    custom_page()->draw(PANEL_X, y, PANEL_W, focused);
+    custom_page()->draw(PANEL_X, y, PANEL_W, FB_H - 56 - y, focused);
   }
   draw_footer();
   if (focus == F_DIALOG) draw_dialog();
@@ -277,10 +268,22 @@ static void preview(void) {
 
 // ---- keys ----
 
+static const cpage_t *shown;     // the page whose section is chosen (show / hide)
+static void track_tab(void) {
+  const cpage_t *p = setup_active ? custom_page() : 0;
+  if (p == shown) return;
+  if (shown && shown->hide) shown->hide();
+  shown = p;
+  if (shown && shown->show) shown->show();
+}
+
 static void leave(void) {
   if (focus == F_CUSTOM && custom_page()->close) custom_page()->close();
   focus = F_TABS;
   setup_active = 0;
+  track_tab();
+  ntp_sync_cancel();
+  esp_own(0);                    // the ESP back to the MCU
   if (preview_mode >= 0) settings_preview(-1);
   preview_mode = -1;
   browser_open();
@@ -477,7 +480,6 @@ void setup_mouse(int ev) {
 
 enum { C_DATE, C_TIME, C_TZ, C_SET, C_SYNC, C_COUNT };
 enum { CH_FIELD = 0, CH_TZ = 2, CH_TZ_DOWN, CH_TZ_UP, CH_SET, CH_SYNC, CH_CHAR = 10 };   // CH_CHAR + 20 * field + char
-#define FIELD_H 28
 #define FIELD_X 120
 #define CHAR_W 14
 #define TZ_W 160
@@ -581,13 +583,14 @@ static void draw_field(int x, int w, int focused_page, int i, int y, const char 
   gfx_text_left(&f27, fx + fw + 16, y + FIELD_H / 2, hint, gfx_ramp(look.copyright, surf));
 }
 
-static void page_button(int x, int y, int w, const char *label, int focused, int focused_page, int id) {
+void page_button(int x, int y, int w, const char *label, int focused, int focused_page, int id) {
   int lit = focused && focused_page;
   if (focused_page && hit_add(x, y, w, TAB_H, HIT_PAGE + id)) hover_frame(x, y, w, TAB_H);
   button(x, y, w, TAB_H, &f28, lit ? look.text_active : look.text, lit ? look.active : look.button, GFX_ALPHA, label);
 }
 
-static void clock_draw(int x, int y0, int w, int focused) {
+static void clock_draw(int x, int y0, int w, int h, int focused) {
+  (void) h;
   if (!focused) { fields[0].edited = fields[1].edited = 0; read_rtc(); }
   follow_rtc();
   int y = y0 + 10;
@@ -613,11 +616,17 @@ static void clock_draw(int x, int y0, int w, int focused) {
   int by = y + 128;
   page_button(x + 16, by, 140, "Set", c_focus == C_SET, focused, CH_SET);
   page_button(x + 172, by, 140, "NTP sync", c_focus == C_SYNC, focused, CH_SYNC);
-  if (c_msg && focused)
-    gfx_text_left(&f28, x + 16, by + TAB_H + 24, c_msg, gfx_ramp_alpha(c_msg_ok ? OK_COLOR : ERROR_COLOR));
+  const char *m = ntp_sync_state() == NTP_BUSY ? ntp_sync_message() : c_msg;   // the progress as it goes
+  if (m && focused)
+    gfx_text_left(&f28, x + 16, by + TAB_H + 24, m,
+                  gfx_ramp_alpha(ntp_sync_state() == NTP_BUSY ? look.text : c_msg_ok ? OK_COLOR : ERROR_COLOR));
 }
 
-static void ntp_sync(void) { say("NTP sync: comes with the Wi-Fi page", 0); }
+static void ntp_sync(void) {
+  if (!settings_save_one(S_TZ)) { say("Can't save karabas.ini", 0); return; }
+  c_msg = 0;
+  ntp_sync_start(set_val[S_TZ]);
+}
 
 static int clock_key(const key_ev_t *e) {
   field_t *f = c_focus < C_TZ ? &fields[c_focus] : 0;
@@ -666,6 +675,16 @@ static int clock_tick(void) {
   static uint32_t t = 0;
   int redraw = 0;
   if (c_msg && c_msg_ok && R_MS - c_msg_t > 5000) { c_msg = 0; redraw = 1; }
+  if (ntp_sync_state() == NTP_BUSY) {
+    static const char *last;
+    uint8_t r = ntp_sync_poll();
+    if (r != NTP_BUSY) {
+      if (r == NTP_OK) { fields[0].edited = fields[1].edited = 0; read_rtc(); follow_rtc(); }
+      say(ntp_sync_message(), r == NTP_OK);
+      redraw = 1;
+    } else if (ntp_sync_message() != last) redraw = 1;
+    last = ntp_sync_message();
+  }
   if (R_MS - t >= 1000) {
     t = R_MS;
     uint8_t old = rtc[5];
@@ -682,23 +701,24 @@ static const char *clock_hint(void) {
 }
 static const char *clock_keys(void) { return "Up/Down: select   Enter: next / set   Esc: back"; }
 
-static const cpage_t page_clock = { clock_open, clock_close, clock_draw, clock_key, clock_tick, clock_click, clock_hint, clock_keys };
+static const cpage_t page_clock = { clock_open, clock_close, 0, 0, clock_draw, clock_key, clock_tick, clock_click, clock_hint, clock_keys };
 
 // ---- Wi-Fi and Gamepad: the next steps of Ф3 ----
 
-static void later_draw(int x, int y, int w, int focused) {
-  (void) w; (void) focused;
+static void later_draw(int x, int y, int w, int h, int focused) {
+  (void) w; (void) h; (void) focused;
   gfx_text_left(&f28, x + 16, y + 20, "Comes in the next step", gfx_ramp_alpha(look.copyright));
 }
 static const char *later_hint(void) { return ""; }
-static const cpage_t page_later = { 0, 0, later_draw, 0, 0, 0, later_hint, later_hint };
+static const cpage_t page_later = { 0, 0, 0, 0, later_draw, 0, 0, 0, later_hint, later_hint };
 
 static const cpage_t *custom_page(void) {
-  return tab == T_CLOCK ? &page_clock : tab == T_WIFI || tab == T_PAD ? &page_later : 0;
+  return tab == T_CLOCK ? &page_clock : tab == T_WIFI ? &page_wifi : tab == T_PAD ? &page_later : 0;
 }
 
 void setup_tick(void) {
   static uint32_t t_clock = 0;
+  esp_pump();
   const cpage_t *p = custom_page();
   if (p && p->tick && p->tick()) { draw(); return; }
   if (R_MS - t_clock >= 1000) { t_clock = R_MS; pointer_hide(); draw_clock(); pointer_show(); }

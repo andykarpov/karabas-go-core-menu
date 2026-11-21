@@ -1,4 +1,6 @@
 // The parts shared by the screens of the menu (ui.h).
+#include <stdarg.h>
+#include <stdio.h>
 #include "ui.h"
 #include "mmio.h"
 #include "rpc.h"
@@ -8,6 +10,15 @@
 // ---- strings ----
 
 void dbg_puts(const char *s) { while (*s) R_DBG = (uint8_t) *s++; }
+void dbg_printf(const char *fmt, ...) {
+  char b[160];
+  va_list a;
+  va_start(a, fmt);
+  vsnprintf(b, sizeof(b) - 1, fmt, a);
+  va_end(a);
+  dbg_puts(b);
+  dbg_puts("\n");
+}
 int str_eq(const char *a, const char *b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
 static char lower(char c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; }
 int str_ieq(const char *a, const char *b) { while (*a && lower(*a) == lower(*b)) { a++; b++; } return lower(*a) == lower(*b); }
@@ -245,9 +256,3 @@ int hit_at(int x, int y) {
 }
 
 void ui_click(void) { if (look.click) midi_click(); }
-
-// ---- no libc: what the compiler calls for struct copies and zero fills ----
-#ifndef HOST
-void *memset(void *d, int c, unsigned long n) { uint8_t *p = d; while (n--) *p++ = (uint8_t) c; return d; }
-void *memcpy(void *d, const void *s, unsigned long n) { uint8_t *p = d; const uint8_t *q = s; while (n--) *p++ = *q++; return d; }
-#endif

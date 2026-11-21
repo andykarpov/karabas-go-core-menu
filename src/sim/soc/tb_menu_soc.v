@@ -38,7 +38,14 @@ module tb_menu_soc (
 	output wire signed [15:0] snd_out,
 	output wire snd_t,
 	output wire [7:0] midi_data,
-	output wire midi_wr
+	output wire midi_wr,
+	// the ESP8266 as esp8266.vhd shows it: a byte held until its ack, the bytes to it
+	input wire [7:0] esp_rx_data,
+	input wire esp_rx_wr,
+	output wire esp_rx_ack,
+	output wire [7:0] esp_tx_data,
+	output wire esp_tx_wr,
+	output wire esp_own
 );
 wire [10:0] rpc_a;
 wire rpc_we;
@@ -79,7 +86,8 @@ menu_soc #(.CLR_LAST(21'h00FFFF)) soc (
 	.frame_t(frame_t), .show(show), .grad_top(grad_top), .grad_bot(grad_bot),
 	.rpc_a(rpc_a), .rpc_we(rpc_we), .rpc_wd(rpc_wd), .rpc_rd(rpc_rd),
 	.snd_out(snd_out), .snd_t(snd_t), .midi_data(midi_data), .midi_wr(midi_wr), .midi_full(1'b0),
-	.esp_rx_data(8'd0), .esp_rx_valid(1'b0), .esp_rx_ack(), .esp_tx_data(), .esp_tx_wr(), .esp_own(),
+	.esp_rx_data(esp_rx_data), .esp_rx_valid(esp_rx_wr && esp_own), .esp_rx_ack(esp_rx_ack),
+	.esp_tx_data(esp_tx_data), .esp_tx_wr(esp_tx_wr), .esp_own(esp_own),
 	.dbg_uart(dbg_uart), .dbg_uart_wr(dbg_uart_wr), .cpu_run(cpu_run),
 	.MA(MA), .MD_I(MD_I), .MD_O(MD_O), .MD_OE_N(MD_OE_N), .MWR_N(MWR_N), .MRD_N(MRD_N)
 );

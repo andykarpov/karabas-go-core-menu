@@ -20,3 +20,6 @@ TB_SOUND=1 TB_FRAME=frame_sound.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.b
 # Setup: S, a frame of it (the other buffer, its own palette), Esc back to the list, Down, Enter
 echo "tb_menu_soc: the Setup run"
 TB_SETUP=1 TB_FRAME=frame_setup_list.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc"
+# Wi-Fi: the section asks the status of the ESP over its uart (MMIO ESP / ESP_OWN, a model of the ESP)
+echo "tb_menu_soc: the Wi-Fi run"
+TB_WIFI=1 TB_FRAME=frame_wifi.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|ESP"

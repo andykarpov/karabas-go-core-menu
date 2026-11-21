@@ -29,6 +29,36 @@ volatile uint32_t *host_reg(uint32_t off) {
   return &regs[off / 4];
 }
 
+// ---- a fake ESP8266: AT 1.7.6, joined to M-WiFinkA, three networks around ----
+static char esp_out[4096];
+static int esp_out_n = 0, esp_out_at = 0;
+static char esp_cmd[200];
+static int esp_cmd_n = 0;
+static void esp_say(const char *s) { while (*s && esp_out_n < (int) sizeof(esp_out)) esp_out[esp_out_n++] = *s++; }
+static int esp_joined = 1;
+void host_esp_tx(uint8_t c) {
+  if (c == '\n') {
+    esp_cmd[esp_cmd_n] = 0;
+    if (esp_cmd_n && esp_cmd[esp_cmd_n - 1] == '\r') esp_cmd[--esp_cmd_n] = 0;
+    esp_cmd_n = 0;
+    const char *c = esp_cmd;
+    if (!strcmp(c, "AT+GMR")) esp_say("AT version:1.7.6.0(Jan 24 2022 08:56:02)\r\nSDK version:3.0.6\r\n");
+    else if (!strcmp(c, "AT+UART_DEF?")) esp_say("+UART_DEF:115200,8,1,0,2\r\n");
+    else if (!strcmp(c, "AT+CWMODE?")) esp_say("+CWMODE:1\r\n");
+    else if (!strcmp(c, "AT+CWJAP?")) esp_say(esp_joined ? "+CWJAP:\"M-WiFinkA\",\"aa:bb:cc:dd:ee:ff\",6,-52\r\n" : "No AP\r\n");
+    else if (!strcmp(c, "AT+CIFSR")) esp_say(esp_joined ? "+CIFSR:STAIP,\"192.168.1.114\"\r\n" : "+CIFSR:STAIP,\"0.0.0.0\"\r\n");
+    else if (!strcmp(c, "AT+CWLAP")) esp_say("+CWLAP:(3,\"M-WiFinkA\",-52,\"aa\",6)\r\n+CWLAP:(0,\"Guest\",-71,\"bb\",1)\r\n+CWLAP:(4,\"\xd0\x94\xd0\xbe\xd0\xbc\",-80,\"cc\",11)\r\n");
+    else if (!strncmp(c, "AT+CIPSNTPTIME?", 15)) esp_say("+CIPSNTPTIME:Sat Nov 21 11:59:30 2026\r\n");
+    esp_say("\r\nOK\r\n");
+    return;
+  }
+  if (esp_cmd_n < (int) sizeof(esp_cmd) - 1) esp_cmd[esp_cmd_n++] = (char) c;
+}
+int host_esp_rx(void) { return esp_out_at < esp_out_n ? (uint8_t) esp_out[esp_out_at++] : -1; }
+
+// the setup loop for a while (the AT steps answer as the main loop runs them)
+static void run_ms(int ms) { uint32_t end = now_ms + ms; while (now_ms < end) setup_tick(); }
+
 // ---- the fake firmware ----
 static const char *ini[][3] = {
   { "setup", "debug", "1" }, { "setup", "dvi_only", "0" }, { "setup", "core_sort", "name" }, { "setup", "tz", "+01:00" },
@@ -168,6 +198,15 @@ int main(int argc, char **argv) {
   keys("s");
   ptr.visible = 1; ptr.x = 80; ptr.y = 88 + 40 + 10; setup_mouse(M_MOVED); dump("16_hover_tab");
   keys("de"); ptr.x = 400; ptr.y = 128 + 36 + 10; setup_mouse(M_MOVED); dump("17_hover_row");
+  // Wi-Fi: the status as soon as the section is chosen, the network list, a password
+  keys("xxxs" "ddddd" "d");   run_ms(3000);      dump("19_wifi_status");
+  keys("e" "e");              run_ms(3000);      dump("20_wifi_list");
+  keys("e");                                     dump("21_wifi_pass");
+  { key_ev_t e = { 0 }; e.key = 0x13; e.ch = 'p'; setup_key(&e); e.ch = 'w'; setup_key(&e); }   dump("22_wifi_typed");
+  keys("xxx" "d");                               dump("23_wifi_menu2");
+  // Clock: NTP sync
+  keys("uu" "e" "dddd" "e"); run_ms(300);        dump("24_ntp_busy");
+  run_ms(2500);                                  dump("25_ntp_done");
   // Save: the changed values in one SET, then SAVE
   keys("xxx");                                   // back to the list (the hover runs left the page open)
   keys("serx" "dddddddd" "e");                   dump("18_saved");

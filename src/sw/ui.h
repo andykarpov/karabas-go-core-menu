@@ -7,6 +7,7 @@
 
 // ---- strings ----
 void dbg_puts(const char *s);
+void dbg_printf(const char *fmt, ...);            // a line (the newline added)
 int str_eq(const char *a, const char *b);
 int str_ieq(const char *a, const char *b);          // ignoring the case of ASCII letters
 int str_len(const char *s);
@@ -35,7 +36,7 @@ void draw_character(void);
 
 // ---- keys: the USB keyboard and the pads (a pad as the arrows, A / B Enter, C / Mode Esc) ----
 enum {
-  K_A = 0x04, K_S = 0x16, K_1 = 0x1E, K_0 = 0x27, K_ENTER = 0x28, K_ESC = 0x29, K_BKSP = 0x2A, K_TAB = 0x2B,
+  K_A = 0x04, K_R = 0x15, K_S = 0x16, K_1 = 0x1E, K_0 = 0x27, K_ENTER = 0x28, K_ESC = 0x29, K_BKSP = 0x2A, K_TAB = 0x2B,
   K_SPACE = 0x2C, K_RIGHT = 0x4F, K_LEFT = 0x50, K_DOWN = 0x51, K_UP = 0x52, K_PGUP = 0x4B, K_PGDN = 0x4E,
   K_HOME = 0x4A, K_END = 0x4D, K_KPENTER = 0x58, K_KP1 = 0x59, K_KP0 = 0x62,
   K_PAD_START = 0xF0,            // the Start button of a pad (no key of the keyboard)
