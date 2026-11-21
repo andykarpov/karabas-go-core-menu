@@ -14,6 +14,8 @@
  - CPU, a wishbone slave as the VexRiscv buses use it: a line fill (CTI 010, 8 words from the first
    word of the line) or a single read, each word acked when its two halfwords are in; a write of one
    word with the byte selects (a halfword per write, the lanes of a halfword in one /WE), acked after it.
+ - sound: aud_req (held until aud_ack) reads the halfword at aud_adr (menu_sound: a sample at most
+   every 1562 clocks a channel), before the CPU.
  - video: vid_req (a pulse) asks vid_len halfwords from halfword address vid_adr; they come out as
    vid_we / vid_wa (0..vid_len-1) / vid_wd. Served between CPU transactions, VID_CHUNK halfwords at a
    time, the video first after a CPU transaction; vid_busy until done.
@@ -42,6 +44,12 @@ module menu_sram #(
 	input wire [31:0] wb_dat_i,
 	output reg [31:0] wb_dat_o = 32'd0,
 	output reg wb_ack = 1'b0,
+
+	// sound
+	input wire aud_req,
+	input wire [20:0] aud_adr,
+	output reg aud_ack = 1'b0,
+	output reg [15:0] aud_dat = 16'd0,
 
 	// video
 	input wire vid_req,
@@ -75,7 +83,7 @@ assign MD_O = md_out;
 assign MD_OE_N = md_oe_n;
 
 localparam [3:0] S_IDLE = 4'd0, S_RD = 4'd1, S_W1 = 4'd2, S_W2 = 4'd3, S_W3 = 4'd4, S_VID = 4'd5,
-	S_C1 = 4'd6, S_C2 = 4'd7, S_C3 = 4'd8;
+	S_C1 = 4'd6, S_C2 = 4'd7, S_C3 = 4'd8, S_A1 = 4'd9, S_A2 = 4'd10, S_A3 = 4'd11;
 
 reg [3:0] st = S_IDLE;
 wire wb_req = wb_cyc & wb_stb & ~wb_ack;
@@ -103,6 +111,7 @@ assign clr_busy = clr_pend;
 always @(posedge clk) begin
 	wb_ack <= 1'b0;
 	vid_we <= 1'b0;
+	aud_ack <= 1'b0;
 	md_in <= MD_I;
 	if (clr_req) clr_pend <= 1'b1;
 	if (vid_req && !vid_pend && vid_len != 9'd0) begin
@@ -128,6 +137,9 @@ always @(posedge clk) begin
 			v_ph <= 1'b0;
 			v_run <= VID_CHUNK;
 			st <= S_VID;
+		end else if (aud_req && !aud_ack) begin
+			ma_r <= aud_adr;
+			st <= S_A1;
 		end else if (wb_req) begin
 			cpu_last <= 1'b1;
 			q_adr <= wb_adr;
@@ -216,6 +228,15 @@ always @(posedge clk) begin
 			if (v_left == 9'd0) vid_pend <= 1'b0;
 			if (v_left == 9'd0 || v_run == 6'd0) st <= S_IDLE;
 		end
+	end
+
+	// sound: the address out two clocks (as a read halfword), md_in taken at the end of the second
+	S_A1: st <= S_A2;
+	S_A2: st <= S_A3;
+	S_A3: begin
+		aud_dat <= md_in;
+		aud_ack <= 1'b1;
+		st <= S_IDLE;
 	end
 
 	// clear: both chips, a halfword of zeros in three clocks (the address and the data set with /WE

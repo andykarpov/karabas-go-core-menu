@@ -153,6 +153,8 @@ assign ESP32_SPI_CS_N     = 1'b1;
 // system clocks
 wire clk_sys, clk_sys_pll, clk_8mhz, clk_cpu;
 wire locked, areset;
+wire signed [15:0] snd_out;   // the PCM sounds of menu_soc (clk_cpu)
+wire snd_t;
 
 // VCO 50 * 18 / 2 = 450 MHz, phase 0: clk_sys 40.91 MHz (/11: the 800 x 600 video, HDMI, audio), clk_8 8.18 MHz
 // (/55: FT_CLK_OUT, the base of DCM_CLKGEN in hdmi_pll), clk_cpu 75 MHz (/6: the menu CPU, the SRAM, the MCU link,
@@ -262,8 +264,23 @@ i2s_transceiver adc(
 ODDR2 oddr_adc2(.Q(ADC_CLK), .C0(clk_sys), .C1(~clk_sys), .CE(1'b1), .D0(1'b1), .D1(1'b0), .R(1'b0), .S(1'b0));
 
 // ------- audio mix
-wire [15:0] audio_mix_l = adc_l[23:8];
-wire [15:0] audio_mix_r = adc_r[23:8];
+// the PCM sounds of the menu (menu_sound, clk_cpu: a value with each snd_t toggle) added to the ADC
+// (the SAM2695 and the line in) with saturation
+reg [2:0] snd_t_s = 3'd0;
+reg signed [15:0] snd_s = 16'sd0;
+always @(posedge clk_sys) begin
+    snd_t_s <= { snd_t_s[1:0], snd_t };
+    if (snd_t_s[2] != snd_t_s[1]) snd_s <= snd_out;   // stable: it changed with the toggle
+end
+function [15:0] sat_add16(input [15:0] a, input [15:0] b);
+    reg signed [16:0] s;
+    begin
+        s = $signed({ a[15], a }) + $signed({ b[15], b });
+        sat_add16 = (s > 17'sd32767) ? 16'h7FFF : (s < -17'sd32768) ? 16'h8000 : s[15:0];
+    end
+endfunction
+wire [15:0] audio_mix_l = sat_add16(adc_l[23:8], snd_s);
+wire [15:0] audio_mix_r = sat_add16(adc_r[23:8], snd_s);
 
 // ------- DAC --------------
 kg_pcm5102 #(.DIV_BITS(2)) PCM5102(
@@ -317,8 +334,15 @@ wire esp_in_wr = esp_uart_rx_wr && !port_in_full[1];
 assign esp_uart_rx_ack = esp_in_wr;
 assign esp_uart_tx_data = port_out_data[15:8];
 assign esp_uart_tx_wr = port_out_wr[1];
-assign midi_data = port_out_data[23:16];
-assign midi_wr = port_out_wr[2];
+// MIDI: the keyboard of PORT 2 and the sounds of the menu CPU, switched at whole messages
+wire [7:0] cpu_midi_data;
+wire cpu_midi_wr, cpu_midi_full, kb_midi_ready;
+menu_midi_mux midi_mux (
+    .clk(clk_cpu),
+    .kb_data(port_out_data[23:16]), .kb_wr(port_out_wr[2]), .kb_ready(kb_midi_ready),
+    .cpu_data(cpu_midi_data), .cpu_wr(cpu_midi_wr), .cpu_full(cpu_midi_full),
+    .tx_data(midi_data), .tx_wr(midi_wr)
+);
 
 kg_mcu2 #(
     .CAPS(16'h0210),     // bit 9 MIDI IN, bit 4 the core drives LD_READY (the menu program is loaded into the SRAM) .SW_N(2), .CS_FILTER(3),
@@ -346,7 +370,7 @@ kg_mcu2 #(
     .SDC_BYTE_IN_DATA(), .SDC_BYTE_OUT_DATA(8'd0), .IMG_WP(), .IMG_PHYS_WR(), .IMG_PHYS(),
     .IMG_FLUSH(), .FDD_CHNG_WR(), .FDD_CHNG(), .FDD_CHNG_REQ(1'b0), .FDD_CHNG_DS(2'd0), .IMG_ACTIVE(),
 
-    .PORT_OUT_DATA(port_out_data), .PORT_OUT_WR(port_out_wr), .PORT_OUT_READY(4'b1111),
+    .PORT_OUT_DATA(port_out_data), .PORT_OUT_WR(port_out_wr), .PORT_OUT_READY({ 1'b1, kb_midi_ready, 2'b11 }),
     .PORT_IN_DATA({ 16'd0, esp_uart_rx_data, 8'd0 }), .PORT_IN_WR({ 2'b00, esp_in_wr, 1'b0 }),
     .PORT_IN_FULL(port_in_full), .PORT_CFG(128'd0), .PORT_STAT(), .PORT_STAT_WR(),
 
@@ -399,6 +423,8 @@ menu_soc soc (
     .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
     .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .fb_sel(fb_sel), .fb_shown(fb_shown),
     .frame_t(frame_t), .show(fb_show), .grad_top(grad_top), .grad_bot(grad_bot),
+    .snd_out(snd_out), .snd_t(snd_t),
+    .midi_data(cpu_midi_data), .midi_wr(cpu_midi_wr), .midi_full(cpu_midi_full),
     .rpc_a(rpc_a), .rpc_we(rpc_we), .rpc_wd(rpc_wd), .rpc_rd(rpc_rd),
     .dbg_uart(), .dbg_uart_wr(), .cpu_run(),
     .MA(MA), .MD_I(MD), .MD_O(sram_do), .MD_OE_N(sram_oe_n), .MWR_N(MWR_N), .MRD_N(MRD_N)

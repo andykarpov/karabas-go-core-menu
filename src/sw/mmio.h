@@ -10,6 +10,7 @@
 #define R_SHOW   MMIO(0x10) // W: bit 0 the frame buffer on the screen
 #define R_GRAD_TOP MMIO(0x18) // W: the top colour of the background gradient
 #define R_GRAD_BOT MMIO(0x20) // W: its bottom colour (3/4 of the height and below)
+#define R_MIDI   MMIO(0xa0) // W: a MIDI byte to the SAM2695; R: bit 0 its fifo is full
 #define R_LAUNCH MMIO(0x14) // W: the SRAM is cleared, then the RPC call written is made (CORES LAUNCH)
 #define R_MS     MMIO(0x1c) // R: milliseconds since the start
 #define R_KBD0   MMIO(0x28) // R: { key 3, key 2, key 1, modifiers }

@@ -1,9 +1,10 @@
-/* The menu program in the SRAM (menu_soc): program, data, heap and stack below the frame buffers
-   (FB0 0x300000, FB1 0x380000), MMIO at 0x80000000. */
+/* The menu program in the SRAM (menu_soc): program, data, heap and stack below the sounds
+   (0x200000, sounds.bin of boot.kg) and the frame buffers (FB0 0x300000, FB1 0x380000), MMIO at
+   0x80000000. */
 OUTPUT_ARCH("riscv")
 ENTRY(_start)
 
-MEMORY { RAM (rwx) : ORIGIN = 0x00000000, LENGTH = 0x300000 }
+MEMORY { RAM (rwx) : ORIGIN = 0x00000000, LENGTH = 0x200000 }
 
 STACK_SIZE = 64K;
 

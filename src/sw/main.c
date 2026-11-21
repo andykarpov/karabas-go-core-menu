@@ -8,6 +8,7 @@
 #include "gfx.h"
 #include "fonts_gen.h"
 #include "images_gen.h"
+#include "sound.h"
 
 static void dbg_puts(const char *s) { while (*s) R_DBG = (uint8_t) *s++; }
 
@@ -25,9 +26,9 @@ static char *u2s(char *p, uint32_t v, int digits) {
 
 typedef struct {
   uint32_t bg, gradient, button, active, text, text_active, copyright;
-  int time, date, chr, mouse_speed;
+  int time, date, chr, mouse_speed, click, sound;
 } look_t;
-static look_t look = { 0x010101, 0x0000c8, 0x202026, 0x0000c8, 0xffffff, 0xffffff, 0x787878, 1, 1, 1, 3 };
+static look_t look = { 0x010101, 0x0000c8, 0x202026, 0x0000c8, 0xffffff, 0xffffff, 0x787878, 1, 1, 1, 3, 1, 1 };
 
 static uint8_t buf[RPC_MAX];
 
@@ -75,6 +76,8 @@ static void read_look(void) {
   cfg_bool("char", &look.chr);
   char v[8];
   if (cfg_get("ft812", "mouse_speed", v, sizeof(v)) && v[0] >= '1' && v[0] <= '5') look.mouse_speed = v[0] - '0';
+  cfg_bool("click", &look.click);
+  if (cfg_get("ft812", "sound", v, sizeof(v)) && v[0] >= '0' && v[0] <= '4') look.sound = v[0] - '0';
 }
 
 // the palette of the look
@@ -354,11 +357,19 @@ static void move_to(int n) {
   if (n < 0 || n == sel) return;
   int old = sel;
   sel = n;
+  if (look.click) midi_click();
   if (page_of(old) != page_of(sel)) draw_page();
   else { draw_button(old); draw_button(sel); draw_footer(); }
 }
 
 static void launch(int i) {
+  // the start sound of [ft812] sound (1..4, 0 none), to its end, as the FT812 menu
+  if (look.sound >= 1 && look.sound <= 4) {
+    dbg_puts("menu: start sound\n");
+    snd_play(0, &sounds[look.sound - 1], 255);
+    uint32_t t0 = R_MS;
+    while (snd_playing(0) && R_MS - t0 < 4000) ;
+  }
   dbg_puts("menu: launch "); dbg_puts(cores[i].file); dbg_puts("\n");
   rpc_launch(cores[i].file);
 }

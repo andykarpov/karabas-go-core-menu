@@ -34,7 +34,11 @@ module tb_menu_soc (
 	input wire l_rq,
 	input wire [9:0] l_rq_m,
 	output wire [7:0] l_q,
-	output wire l_irq
+	output wire l_irq,
+	output wire signed [15:0] snd_out,
+	output wire snd_t,
+	output wire [7:0] midi_data,
+	output wire midi_wr
 );
 wire [10:0] rpc_a;
 wire rpc_we;
@@ -74,6 +78,7 @@ menu_soc #(.CLR_LAST(21'h00FFFF)) soc (
 	.pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .fb_sel(fb_sel), .fb_shown(fb_shown),
 	.frame_t(frame_t), .show(show), .grad_top(grad_top), .grad_bot(grad_bot),
 	.rpc_a(rpc_a), .rpc_we(rpc_we), .rpc_wd(rpc_wd), .rpc_rd(rpc_rd),
+	.snd_out(snd_out), .snd_t(snd_t), .midi_data(midi_data), .midi_wr(midi_wr), .midi_full(1'b0),
 	.dbg_uart(dbg_uart), .dbg_uart_wr(dbg_uart_wr), .cpu_run(cpu_run),
 	.MA(MA), .MD_I(MD_I), .MD_O(MD_O), .MD_OE_N(MD_OE_N), .MWR_N(MWR_N), .MRD_N(MRD_N)
 );

@@ -30,6 +30,10 @@
            reading clears)
      38 R  JOY: { joy_r, joy_l }
      40 R  US: microseconds since the CPU started
+     80..9c      SOUND: the two channels of menu_sound (+0 address, +4 length, +8 step, +c control /
+                 R playing), channel 1 at 0x90
+     a0 W  MIDI: a byte to the SAM2695 (menu_midi_mux, whole messages with their status); R bit 0
+           its fifo is full
      400..7fc W  PAL: palette entry ((a - 400) / 4) = 0xARRGGBB: alpha 0..15 in bits 31..28 over the
                  background (0 transparent, 15 opaque)
      2000..3ffc  RPC: byte (a - 2000) / 4 of the mailbox of kg_l2_rpc (kg_mcu2 RPC_*), in the low byte
@@ -86,6 +90,13 @@ module menu_soc #(
 	input wire fb_shown,                  // the one shown (synchronised to clk)
 	input wire frame_t,                   // toggles at each frame (synchronised to clk)
 	output reg show = 1'b0,
+
+	// sound: the PCM mix (48 kHz, snd_t toggles with each value) and the MIDI bytes of the CPU
+	output wire signed [15:0] snd_out,
+	output wire snd_t,
+	output reg [7:0] midi_data = 8'd0,
+	output reg midi_wr = 1'b0,
+	input wire midi_full,
 
 	// RPC (kg_mcu2 RPC_*)
 	output reg [10:0] rpc_a = 11'd0,
@@ -218,15 +229,32 @@ always @(posedge clk) begin
 		own <= O_NONE;
 end
 
+wire aud_req, aud_ack;
+wire [20:0] aud_adr;
+wire [15:0] aud_dat;
 menu_sram #(.CLR_LAST(CLR_LAST)) sram (
 	.clk(clk),
 	.clr_req(clr_req), .clr_busy(clr_busy),
+	.aud_req(aud_req), .aud_adr(aud_adr), .aud_ack(aud_ack), .aud_dat(aud_dat),
 	.wb_cyc(sr_cyc), .wb_stb(sr_cyc), .wb_we(sr_we), .wb_sel(sr_sel), .wb_adr(sr_adr), .wb_cti(sr_cti),
 	.wb_dat_i(sr_wdat), .wb_dat_o(sr_dat), .wb_ack(sr_ack),
 	// no fetches while the frame buffer is off (a loader byte must not wait behind a video chunk)
 	.vid_req(vid_req & show & ~cpu_reset), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa),
 	.vid_wd(vid_wd), .vid_busy(),
 	.MA(MA), .MD_I(MD_I), .MD_O(MD_O), .MD_OE_N(MD_OE_N), .MWR_N(MWR_N), .MRD_N(MRD_N)
+);
+
+// ------------------------------------------------------------------ sound
+
+reg snd_wr = 1'b0;
+reg [1:0] snd_ch = 2'd0, snd_reg = 2'd0;
+reg [31:0] snd_dat = 32'd0;
+wire [1:0] snd_playing;
+menu_sound #(.CLK_HZ(MS_DIV * 1000)) sound (
+	.clk(clk), .reset(cpu_reset),
+	.wr(snd_wr), .wr_ch(snd_ch), .wr_reg(snd_reg), .wr_dat(snd_dat), .playing(snd_playing),
+	.aud_req(aud_req), .aud_adr(aud_adr), .aud_ack(aud_ack), .aud_dat(aud_dat),
+	.out(snd_out), .out_t(snd_t)
 );
 
 // ------------------------------------------------------------------ MMIO
@@ -263,6 +291,8 @@ always @(posedge clk) begin
 	pal_we <= 1'b0;
 	dbg_uart_wr <= 1'b0;
 	rpc_we <= 1'b0;
+	snd_wr <= 1'b0;
+	midi_wr <= 1'b0;
 	launch_clr <= 1'b0;
 	launch_call <= 1'b0;
 	if (launch_wait && !clr_req && !clr_busy && !launch_clr) begin
@@ -324,8 +354,14 @@ always @(posedge clk) begin
 				pal_we <= 1'b1;
 				pal_wa <= io_off[9:2];
 				pal_wd <= { d_dat_o[31:28], d_dat_o[23:0] };
+			end else if (io_off[7:5] == 3'b100) begin   // 0x80..0x9c: the sound
+				snd_wr <= 1'b1;
+				snd_ch <= { 1'b0, io_off[4] };
+				snd_reg <= io_off[3:2];
+				snd_dat <= d_dat_o;
 			end else case (io_off[7:0])
 				8'h00: begin dbg_uart <= d_dat_o[7:0]; dbg_uart_wr <= 1'b1; end
+				8'ha0: begin midi_data <= d_dat_o[7:0]; midi_wr <= 1'b1; end
 				8'h04: fb_sel <= d_dat_o[0];
 				8'h10: show <= d_dat_o[0];
 				8'h18: grad_top <= d_dat_o[23:0];
@@ -355,6 +391,9 @@ always @(posedge clk) begin
 				end
 				8'h38: io_dat <= { joy_r, joy_l };
 				8'h40: io_dat <= us;
+				8'h8c: io_dat <= { 23'd0, snd_playing[0], 8'd0 };
+				8'h9c: io_dat <= { 23'd0, snd_playing[1], 8'd0 };
+				8'ha0: io_dat <= { 31'd0, midi_full };
 				default: io_dat <= 32'd0;
 			endcase
 		end

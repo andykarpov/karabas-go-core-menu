@@ -9,6 +9,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 static Vtb_menu_soc *t;
 static uint64_t now_ps = 0, next_cpu = 0, next_pix = 0;
@@ -18,6 +19,10 @@ static std::string console;
 static std::vector<uint32_t> frame(800 * 600);
 static int cap_state = 0; // 0 wait, 1 waiting for vs, 2 capturing, 3 done
 static int px = 0, py = 0, de_p = 0, vs_p = 0;
+static std::vector<uint8_t> midi_bytes;
+static int snd_t_p = 0, snd_peak = 0;
+static long snd_values = 0;
+static std::vector<int16_t> snd_wave;   // the PCM out at 48 kHz
 
 static void on_pix_edge() {
   int de = t->de, vs = t->vs;
@@ -37,6 +42,15 @@ static void step() {
   if (n == np) { t->clk_pix = !t->clk_pix; next_pix += P_PIX / 2; }
   t->eval();
   if (n == np && t->clk_pix) on_pix_edge();
+  if (n == nc && t->clk_cpu && t->midi_wr) midi_bytes.push_back(t->midi_data);
+  if (n == nc && t->clk_cpu && t->snd_t != snd_t_p) {
+    snd_t_p = t->snd_t;
+    int v = (int16_t) t->snd_out;
+    snd_wave.push_back((int16_t) v);
+    if (v < 0) v = -v;
+    if (v > snd_peak) snd_peak = v;
+    snd_values++;
+  }
   if (n == nc && t->clk_cpu && t->dbg_uart_wr) {
     char c = (char) t->dbg_uart;
     putchar(c);
@@ -140,6 +154,9 @@ static void serve() {
   if (r.svc == 2 && r.fn == 0) { out = { NCORES, 0 }; }
   else if (r.svc == 0 && r.fn == 0) { for (const char *c = "26112103"; *c; c++) out.push_back(*c); out.insert(out.end(), { 3, 1, 7, 0 }); }
   else if (r.svc == 0 && r.fn == 1) { out = { 0xEA, 0x07, 11, 21, 2, 34, 22, 6 }; }  // 21/11/2026 02:34:22
+  else if (r.svc == 1 && r.fn == 0 && !strcmp((const char *) r.data.data() + 2 + strlen((const char *) r.data.data() + 2) + 1, "sound") && !getenv("TB_SOUND")) {
+    put_s(out, "0");  // no start sound (1 s of it is too long for the run), but in the TB_SOUND run
+  }
   else if (r.svc == 1 && r.fn == 0) {
     // CFG GET file, section, key: TB_LOOK="key=value,key=value" gives [ft812] keys, the rest are not
     // there (the defaults of the menu)
@@ -201,6 +218,21 @@ int main(int argc, char **argv) {
     t->ld_wr = 0;
     cpu_clocks(24);
   }
+  // the sounds (roms/sounds.bin of boot.kg) at 0x200000
+  {
+    FILE *fs = fopen("../../roms/sounds.bin", "rb");
+    std::vector<uint8_t> snd;
+    while (fs && (c = fgetc(fs)) != EOF) snd.push_back((uint8_t) c);
+    if (fs) fclose(fs);
+    for (size_t i = 0; i < snd.size(); i++) {
+      if (i % 512 == 0) while (!t->ld_ready) cpu_clock();
+      t->ld_addr = 0x200000 + (uint32_t) i; t->ld_data = snd[i]; t->ld_wr = 1;
+      cpu_clock();
+      t->ld_wr = 0;
+      cpu_clocks(8);   // faster than the firmware (25), still slower than a write of the SRAM (~6)
+    }
+    printf("tb_menu_soc: %zu bytes of sounds loaded\n", snd.size());
+  }
   t->ld_active = 0; t->ld_end = 1; cpu_clock(); t->ld_end = 0;
   printf("tb_menu_soc: %zu bytes loaded\n", prog.size());
 
@@ -232,6 +264,8 @@ int main(int argc, char **argv) {
     else if (phase == 2 && n - t_phase > 600000) { t->kbd = 0; phase = 3; t_phase = n; cap_state = 1; }
     else if (phase == 3 && cap_state == 3 && n - t_phase > 600000) { t->kbd = (uint64_t) 0x28 << 8; phase = 4; t_phase = n; } // Enter
     else if (phase == 4 && !launched.empty()) phase = 5;
+    // TB_SOUND: the start sound after Enter, 20 ms of it are enough
+    else if (phase == 4 && getenv("TB_SOUND") && snd_peak > 1000 && n - t_phase > 1500000) phase = 5;
   }
   t->kbd = 0;
   printf("tb_menu_soc: %d requests served, %llu clocks\n", served, (unsigned long long) n);
@@ -255,6 +289,42 @@ int main(int argc, char **argv) {
     printf("tb_menu_soc: frame.ppm, %d white, %d selection pixels\n", white, selc);
   }
   const char *want = getenv("TB_MOUSE") ? "d.kg" : "b.kg";  // the pointer is on the fourth core
+  // the click of Down / the mouse: Cowbell on channel 10, on and off
+  {
+    static const uint8_t click[6] = { 0x99, 56, 100, 0x89, 56, 0 };
+    bool ok = midi_bytes.size() >= 6 && std::equal(click, click + 6, midi_bytes.begin());
+    printf("tb_menu_soc: %zu MIDI bytes\n", midi_bytes.size());
+    if (!ok) { printf("tb_menu_soc: no click on MIDI\n"); errors++; }
+  }
+  if (getenv("TB_SOUND")) {
+    printf("tb_menu_soc: sound peak %d, %ld values\n", snd_peak, snd_values);
+    if (snd_peak < 1000) { printf("tb_menu_soc: no start sound\n"); errors++; }
+    // the start: the samples of sound 1 (22050 Hz) at 48 kHz, nearest, x 255 / 256: compare the
+    // output from its first value of the sound against roms/sounds.bin
+    FILE *fs = fopen("../../roms/sounds.bin", "rb");
+    std::vector<int16_t> src(20000);
+    size_t got = fs ? fread(src.data(), 2, src.size(), fs) : 0;
+    if (fs) fclose(fs);
+    // aligned at the first value that is not 0 (the sound starts with silence), the output value k
+    // holds the source sample floor(k * 22050 / 48000): the mean difference must be small
+    size_t first = 0, sfirst = 0;
+    while (first < snd_wave.size() && snd_wave[first] == 0) first++;
+    while (sfirst < got && src[sfirst] == 0) sfirst++;
+    long err = 0;
+    int cmp = 0;
+    for (size_t k = 0; first + k < snd_wave.size() && k < 2000; k++) {
+      size_t si = sfirst + (size_t) ((uint64_t) k * 22050 / 48000);
+      if (si >= got) break;
+      err += abs((int) snd_wave[first + k] - (int) src[si] * 255 / 256);
+      cmp++;
+    }
+    int bad = cmp ? (int) (err / cmp) : 99999;
+    printf("tb_menu_soc: the output against sound 1: mean difference %d over %d values\n", bad, cmp);
+    FILE *fo = fopen("sound_out.raw", "wb");
+    if (fo) { fwrite(snd_wave.data(), 2, snd_wave.size(), fo); fclose(fo); }
+    if (bad > 100 || cmp < 1000) { printf("tb_menu_soc: the sound is not sound 1\n"); errors++; }
+    want = "";  // the run ends in the sound, before the launch
+  }
   if (launched != want) { printf("tb_menu_soc: launched '%s', want %s\n", launched.c_str(), want); errors++; }
   else printf("tb_menu_soc: LAUNCH %s after the clear\n", launched.c_str());
   printf("tb_menu_soc: %d errors\n", errors);

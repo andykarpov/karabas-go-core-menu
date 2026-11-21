@@ -7,7 +7,7 @@
     "order": 1,
     "eeprom_bank": 0,
     "buttons": {"btn1": "bootsel", "btn2": {"press": "msc", "hold": "msc2"}},
-    "roms": [{"filename": "roms/menu.bin", "address": 0}],
+    "roms": [{"filename": "roms/menu.bin", "address": 0}, {"filename": "roms/sounds.bin", "address": 2097152}],
     "boards": {
         "go": {"link": 2, "bitstream": "karabas_go.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO", "repeat": 1, "then": "effect", "effect": "clock"}},
         "mini": {"link": 2, "bitstream": "karabas_mini.bin", "matrix": {"mode": "scroll", "text": "KARABAS GO MINI", "repeat": 1, "then": "effect", "effect": "clock"}},
