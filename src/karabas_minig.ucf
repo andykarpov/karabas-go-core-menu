@@ -304,3 +304,12 @@ TIMESPEC "TS_FT_TO_SYS" = FROM "TG_CLK_FT" TO "TG_CLK_SYS" 12.5 ns DATAPATHONLY;
 # The select of the BUFGMUX of hdmi_pll (mux_sel = vdac2_sel, a clk_sys register): a BUFGMUX switches without a
 # glitch at any time of S; its setup to the input clocks only decides at which of their edges.
 NET "hdmi_top/hdmi_pll/mux_sel" TIG;
+# The TMDS words (OUTPUT_REG of hdmi_tx, pixel clock) -> the 5x shift registers of the serializers. With the PERIODs
+# of the FT mode trce times them at 6.1 ns (the clocks of DCM_CLKGEN), so PAR routed them up to 4 ns long; in the
+# mode of the menu (-coremode, the PERIOD of clk_sys / 5) they have 4.9 ns minus 0.35 ns skew and 0.55 ns
+# uncertainty (Mini: -0.2 to -1 ns with map -t 2 to 5; the Mini G met it by its placement). The bound makes PAR
+# keep them short in both modes; it only tightens. The load phase of the serializer is set by its reset, not by
+# the pixel clock: no multicycle.
+INST "hdmi_top/hdmi_tx/ser_d_*" TNM = "TG_SER_D";
+INST "hdmi_top/hdmi_tx/chn*shift_r_*" TNM = "TG_SER_SHIFT";
+TIMESPEC "TS_SER_D" = FROM "TG_SER_D" TO "TG_SER_SHIFT" 3.5 ns DATAPATHONLY;

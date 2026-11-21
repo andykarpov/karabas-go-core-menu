@@ -348,10 +348,10 @@ menu_midi_mux midi_mux (
 );
 
 kg_mcu2 #(
-    .CAPS(16'h0210),     // bit 9 MIDI IN, bit 4 the core drives LD_READY (the menu program is loaded into the SRAM) .SW_N(2), .CS_FILTER(3),
+    .CAPS(16'h0210), .SW_N(2), .CS_FILTER(3), // CAPS bit 9 MIDI IN, bit 4 the core drives LD_READY (the menu program is loaded into the SRAM)
     .ENABLE_OSD(1), .ENABLE_PORTS(4'b0110), .PORT_IN_AW(6),
     .ENABLE_FT(1), .ENABLE_SD2(1),
-    .ENABLE_RPC(1), .RPC_SERVICES(16'h0007)    // SYS, CFG, CORES (karabas-go-firmware docs/link_v2.md 5.9)
+    .ENABLE_RPC(1), .RPC_SERVICES(16'h000F)    // SYS, CFG, CORES, HID (karabas-go-firmware docs/link_v2.md 5.9)
 ) mcu(
     .CLK(clk_cpu), .N_RESET(~reset_cpu),
     .MCU_SCK(mcu_sck), .MCU_MOSI(MCU_MOSI), .MCU_MISO(MCU_MISO), .MCU_SS(MCU_CS_N), .MCU_INT(mcu_int),

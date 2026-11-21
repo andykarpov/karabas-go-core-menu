@@ -172,8 +172,8 @@ works. To decide:
   LEARN_START / STATE / DO, spec 5.9); the page lists the ports, Test shows both ports (pad presses
   injected by AT, Up+A lit), Assign starts the learning in the firmware ("Press a button on the USB
   pad"), Esc stops it. Not tried on the board: a whole learning and Save (no USB pad on the bench),
-  Forget. The HELLO of the core still lists SYS, CFG, CORES (RPC_SERVICES 16'h0007): add HID (bit 3)
-  at the next bitstream build (the firmware grants HID to a menu core anyway).
+  Forget. The HELLO of the core lists SYS, CFG, CORES, HID (RPC_SERVICES 16'h000F) since the Ф4 builds
+  (the firmware grants HID to a menu core anyway).
 
 ## Open items
 

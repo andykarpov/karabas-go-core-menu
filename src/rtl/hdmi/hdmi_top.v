@@ -172,7 +172,7 @@ always @(posedge p_clk_int) begin
 end
 
 // hdmi tx
-hdmi_tx #(.SAMPLE_FREQ(SAMPLERATE)) hdmi_tx(
+hdmi_tx #(.SAMPLE_FREQ(SAMPLERATE), .OUTPUT_REG(1)) hdmi_tx(   // OUTPUT_REG: the encoder -> serializer path (Mini G coremode -0.73 ns)
 	.clk(p_clk_int),
 	.sclk(clk_hdmi),
 	.sclk_n(clk_hdmi_n),
