@@ -99,6 +99,12 @@ memory map of the CPU has slots for the two ports, RPC FS stays in the spec.
   the SAM2695 (MIDI_TX) on its own channel, a mux in front of kg_midi_tx switches at whole messages
   and repeats the running status of the USB MIDI keyboard after a menu message. PCM first.
 
+- Ф2 DONE 2026-11-21 (e1ef50a and before): the look approved, mouse (latched buttons, checked on
+  the board: hover, select, start), autoload gauge, sounds: the start sounds as raw PCM (menu_sound;
+  on the board the recorded envelope matches key1, the user heard it) and the key click as a MIDI
+  Cowbell on the SAM2695 (menu_midi_mux; heard on the board). The bench keeps the feature/rpc
+  firmware until the release (user), its karabas.ini has [ft812] sound=1 now (user).
+
 ## Open items
 
 - The menu resolution: 800 x 600 now; the FT modes of `ft_height()` go away.
