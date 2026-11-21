@@ -122,6 +122,12 @@ memory map of the CPU has slots for the two ports, RPC FS stays in the spec.
   the host frames, Save round trip (Mouse speed 5 -> 4 -> 5 written, read back from karabas.ini after
   a reload). Mini G 43 % LUT, 8 RAMB16, timing met (coremode too).
 
+- Ф3 step 2 (5883a1b) Wi-Fi + NTP, on the board 2026-11-21: the CPU has the uart of the ESP while
+  Setup runs (ESP_OWN), the firmware's wifi_setup / esp_update / ntp_sync run on it as they are
+  (newlib-nano, lib/ = files of the firmware lib/common). The real module: status (AT 1.7.6.0, CTS on,
+  the network, IP), a scan (3 networks); NTP sync set the RTC back from 12:00 to the right time in
+  ~6 s. Not tried on the board: join, Forget, Upgrade / Reset module (the bench module stays joined).
+
 ## Open items
 
 - The menu resolution: 800 x 600 now; the FT modes of `ft_height()` go away.
