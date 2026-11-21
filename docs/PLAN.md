@@ -90,6 +90,15 @@ memory map of the CPU has slots for the two ports, RPC FS stays in the spec.
   start sounds. Checked in the firmware: with the OSD closed (a boot core with RPC) no key reaches the
   screens of the firmware (osd_ui.c: only while is_osd; osd_toggle does nothing in the boot core).
 
+- Sounds (the last part of Ф2, design 2026-11-21, user): (1) PCM: raw signed 16-bit little-endian
+  mono samples (no u-law: that was for the FT812 only) in the ROM section of boot.kg, loaded into the
+  SRAM; a player in RTL (a slow read port of menu_sram, 2 channels: address, length, rate, volume,
+  play / stop), added with saturation to the DAC / HDMI mix; the four start sounds of the FT menu
+  (key1..4 of the firmware bitmaps.h) converted once by a script, own phrases from WAV (mono, the rate,
+  silence trimmed); an 8-bit mode only if a sound gets long. (2) MIDI: the CPU writes MIDI bytes to
+  the SAM2695 (MIDI_TX) on its own channel, a mux in front of kg_midi_tx switches at whole messages
+  and repeats the running status of the USB MIDI keyboard after a menu message. PCM first.
+
 ## Open items
 
 - The menu resolution: 800 x 600 now; the FT modes of `ft_height()` go away.
