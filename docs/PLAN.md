@@ -26,30 +26,49 @@ master before it.
 - Fonts: our own (an OFL font rendered at build time to 4 bpp), not the FT812 ROM fonts. "Looks
   like the FT menu", not pixel exact.
 - Code, fonts, logo, background and key sounds go into the ROM section of `boot.kg` (LOAD kind 0,
-  `read_roms()` runs for the boot core too): the CPU is held in reset until `LOAD END`.
+  `read_roms()` runs for the boot core too): the CPU is held in reset until `LOAD END`. The program
+  of the CPU is updated without a new bitstream (user, 2026-11-21).
+- The code runs from SRAM behind the VexRiscv caches (I$ / D$ 4K of the Doom config), not from
+  BRAM: no RAMB16 limit for the later file manager / Wi-Fi code; Ф0 measures the speed with the
+  scanout on the same SRAM (fallback: code in BRAM, loaded the same way).
 - Setup RTC and Map USB gamepad are **rewritten on the CPU** too (the firmware keeps its own for the
   F12 OSD of the other cores); the gamepad learning stays in the firmware (`hid_learn`) and is called
   over RPC.
-- Wi-Fi: the ESP8266 is behind the FPGA; the menu CPU talks AT to it directly (no RPC).
+- Wi-Fi: the ESP8266 is behind the FPGA and belongs to the core (user, 2026-11-21): the menu CPU
+  talks AT to it directly (no RPC); PORT 1 (the passthrough to the MCU) goes from the boot core.
 - Fallback: a boot core without the RPC caps bit (an old `boot.kg` with a new firmware) gets only a
   message "update boot.kg" in its bitmap OSD and the MSC hint (BTN2); no menu in the firmware.
-- SRAM: the menu clears the SRAM before it asks for a core (the frame buffer must not reach the
-  next core); `sram_clear` at start stays.
+- SRAM: the code and the frame buffer are in it, so the clear before a core is done by the
+  hardware: the CPU writes the `CORES LAUNCH` request and sets "clear, then call"; `sram_clear`
+  stops the CPU, fills the SRAM and only then makes the request pending for the MCU. The fill at
+  start stays.
 
 ## Phases
 
 | Phase | Work | Gate |
 |---|---|---|
-| Ф0 | Fit gate on Mini G (`-t 2`): VexRiscv, code in BRAM, frame buffer + palette + scanout from SRAM, a stub blitter, "hello" drawn by C; the SRAM shared by scanout / CPU / blitter at 40.9 MHz; `sram_clear` kept; the existing OSD / ESP / MIDI / SD2 / FT812 paths untouched | LUT, RAMB16, timing met (and `minig-coremode`), a frame on the board |
+| Ф0 | Fit gate on Mini G (`-t 2`): VexRiscv, the program loaded into SRAM by `LOAD` from `boot.kg`, frame buffer + palette + scanout from SRAM, a stub blitter, "hello" drawn by C; the SRAM shared by scanout / CPU / blitter at 40.9 MHz; `sram_clear` kept; the existing OSD / ESP / MIDI / SD2 / FT812 paths untouched | LUT, RAMB16, timing met (and `minig-coremode`), a frame on the board |
 | Ф1 | RPC: the spec into firmware `docs/link_v2.md` (+ `.ru`); modules `kg_l2_rpc` + testbench; firmware server (SYS, CORES, CFG) + the fallback; menu: a plain core list and launch | sims `0 errors`, a core starts from the new menu on Mini G |
 | Ф2 | Graphics: the full blitter, the font pipeline, logo / background, mouse cursor, key sounds; the core browser in the FT look | **UI approval of the user** (frames) |
 | Ф3 | Setup on the CPU: Settings (CFG), RTC, Wi-Fi (ESP direct), Map USB gamepad (HID learn over RPC), About, autoload | UI approval, hw on Mini G |
-| Ф4 | FS service (generic, sandboxed) + the guide for other cores; the boot UI removed from the firmware; Go and Mini builds; release | sims, the three boards, one PR per repo |
+| Ф4 | The boot UI removed from the firmware; Go and Mini builds; **release of the minimal version** | sims, the three boards, one PR per repo |
+| Ф5 | Later iterations: two-panel file manager (copy / move / delete between the cards, see below), RPC FS (generic, sandboxed) + the guide for other cores | UI approval, hw |
+
+## Ф5: two-panel file manager (later, after the minimal release)
+
+Drives of the CPU, one VFS in C (FatFs, BSD-style licence) over three back ends:
+
+| Drive | Where it is wired | Access from the menu |
+|---|---|---|
+| SD1 (cores, configs) | RP2040 | RPC FS (the MCU owns the card) |
+| SD2 | FPGA (`SD_*`; now passed to the MCU for `msc2`) | local: an SPI master in the FPGA, FatFs on the CPU; the passthrough to the MCU is off while the menu uses it (`msc2` and the menu exclusive) |
+| CF | FPGA (`WA` / `WD` / `WCS_N` IDE bus: Go, the shield of Mini G) | local: a CF / ATA PIO port in the FPGA, FatFs on the CPU |
+
+A copy SD1 <-> SD2 / CF goes through the RAM of the CPU (RPC FS reads / writes 512-byte blocks).
+Keep the space for it in Ф0-Ф4: the pins of SD2 and CF stay free in the RTL of the menu, the
+memory map of the CPU has slots for the two ports, RPC FS stays in the spec.
 
 ## Open items
 
-- Code in BRAM (32-64 KB = 16-32 RAMB16) or in SRAM behind an I-cache: decided by Ф0.
 - The menu resolution: 800 x 600 now; the FT modes of `ft_height()` go away.
-- The ESP while the menu runs: owned by the CPU; PORT 1 (USB passthrough to the ESP) only when the
-  menu does not use it.
 - FS sandbox for other cores: a `core.json` key with the allowed roots (tools `make_core`).

@@ -71,7 +71,7 @@ file: 0 `karabas.ini` (the boot core only), 1 the core's own `/config/<id>.ini`.
 |---|---|---|---|
 | 00 | `SCAN` | | count (2) | In the order of `[setup] core_sort` |
 | 01 | `ITEM` | index (2) | file name, name, build, id, flags (NUL separated) |
-| 02 | `LAUNCH` | file name | | The menu has cleared the SRAM before |
+| 02 | `LAUNCH` | file name | | Sent with "clear, then call": the hardware fills the SRAM (the code is there too), then the request is pending; no response is read |
 | 03 | `AUTOLOAD` | | timeout (s), file name | From `[autoload]` |
 
 ### 03 HID (the boot core only)
@@ -85,7 +85,11 @@ file: 0 `karabas.ini` (the boot core only), 1 the core's own `/config/<id>.ini`.
 
 Events of HID: `code 1` a device plugged / unplugged (so the mapper list updates).
 
-### 04 FS (Ф4, generic, sandboxed)
+### 04 FS (Ф5, generic, sandboxed)
+
+The files of SD1 (the card of the MCU). SD2 and CF are wired to the FPGA: a core reaches them
+itself (the menu: FatFs on its CPU), not over RPC.
+
 `OPEN` (path, mode) -> handle, `READ` (handle, length), `WRITE`, `SEEK` (handle, position (4)),
 `CLOSE`, `STAT` (path) -> size (4), attributes, date, `DIR_OPEN`, `DIR_NEXT`, `MKDIR`, `DELETE`,
 `RENAME`. Paths are inside the roots the core file allows (a `core.json` key, open item); the boot
