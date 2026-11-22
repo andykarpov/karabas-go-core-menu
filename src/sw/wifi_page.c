@@ -119,8 +119,10 @@ static void draw(int x, int y, int w, int h, int focused) {
       status(y);
       int by = y + 4 * INFO_STEP + 16;
       uint8_t ids[WS_M_COUNT], n = ws_menu_items(ids), rows = (n + 1) / 2;
+      int bw = (w - 48) / 2;           // two columns in the panel (narrower in 640 x 480)
+      if (bw > BTN_W) bw = BTN_W;
       for (int i = 0; i < n; i++)
-        page_button(bx + (i / rows) * (BTN_W + 16), by + (i % rows) * BTN_STEP, BTN_W, ws_menu_names[ids[i]], s->sel == i, focused, HIT_STATUS + i);
+        page_button(bx + (i / rows) * (bw + 16), by + (i % rows) * BTN_STEP, bw, ws_menu_names[ids[i]], s->sel == i, focused, HIT_STATUS + i);
       break;
     }
     case WS_SCAN: message(y + INFO_STEP / 2, "Scanning...", look.text); break;

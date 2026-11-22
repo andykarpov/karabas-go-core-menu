@@ -24,7 +24,7 @@ enum { HIT_TAB = 100, HIT_ROW = 200, HIT_TOGGLE = 300, HIT_LESS = 400, HIT_MORE 
 typedef struct { const char *name; const uint8_t *ids; uint8_t len; } page_t;
 static const uint8_t page_system[] = { S_DEBUG, S_DVI, S_CORE_SORT, S_MATRIX, S_MATRIX_BRIGHT, S_MX_EFFECTS };
 static const uint8_t page_autoload[] = { S_AUTOLOAD, S_TIMEOUT, S_CORE };
-static const uint8_t page_display[] = { S_TIME, S_DATE, S_CHAR, S_MOUSE };
+static const uint8_t page_display[] = { S_VIDEO, S_TIME, S_DATE, S_CHAR, S_MOUSE };
 static const uint8_t page_sound[] = { S_SOUND, S_CLICK };
 static const uint8_t page_theme[] = { S_THEME, S_C_BG, S_C_GRADIENT, S_C_BUTTON, S_C_ACTIVE, S_C_TEXT, S_C_TEXT_ACTIVE, S_C_COPYRIGHT };
 #define PAGE(name, ids) { name, ids, sizeof(ids) }
@@ -37,10 +37,13 @@ static const char *const tab_names[T_COUNT] = { "System", "Autoload", "Display",
 #define TOP 88
 #define TAB_X 16
 #define TAB_W 160
-#define TAB_STEP 40
+#define TAB_STEP 40              // at most: less where the tabs do not fit (640 x 480), the tabs lower then
 #define TAB_GAP 12               // before Save
+#define FOOTER_H 56
 #define PANEL_X (TAB_X + TAB_W + 16)
-#define PANEL_W 560
+#define PANEL_MAX_W 560
+#define PANEL_W panel_w()
+#define MODE_TEST_S 15           // a video mode tried goes back after it unless kept
 #define ROW_H 32
 #define ROW_STEP 36
 #define VALUE_W 200              // '<', the value of a choice, '>'
@@ -48,6 +51,10 @@ static const char *const tab_names[T_COUNT] = { "System", "Autoload", "Display",
 
 int setup_active = 0;
 static int focus, tab, row, mx_page, dialog_left, color_ch, dragging;
+enum { DLG_DROP, DLG_MODE };
+static int dlg;                  // the dialog shown in F_DIALOG
+static int mode_old;             // DLG_MODE: the video mode before the one tried
+static uint32_t mode_t0;         // its start
 static uint32_t color_old;
 static const char *error;
 static int hover = HIT_NONE;     // under the pointer at the last picture
@@ -60,7 +67,11 @@ static const page_t *cur_page(void) {
   return mx_page ? &mx : &pages[tab];
 }
 static int cur_id(void) { return cur_page()->ids[row]; }
-static int tab_y(int i) { return TOP + i * TAB_STEP + (i >= T_SAVE ? TAB_GAP : 0); }
+// the geometry of the screen (firmware app_ft_setup.c: 640 x 480 and 800 x 600)
+static int panel_w(void) { int w = FB_W - PANEL_X - 16; return w > PANEL_MAX_W ? PANEL_MAX_W : w; }
+static int tab_step(void) { int s = (FB_H - FOOTER_H - TOP - TAB_GAP) / T_COUNT; return s > TAB_STEP ? TAB_STEP : s; }
+static int tab_h(void) { return tab_step() - (TAB_STEP - TAB_H); }
+static int tab_y(int i) { return TOP + i * tab_step() + (i >= T_SAVE ? TAB_GAP : 0); }
 
 // ---- widgets (the FT812 commands of the firmware) ----
 
@@ -108,10 +119,11 @@ int32_t row_back(int x, int y, int w, int h, int focused, int hovered) {
 static void draw_tabs(void) {
   for (int i = 0; i < T_COUNT; i++) {
     int chosen = i == tab, lit = chosen && focus == F_TABS;
-    if (hit_add(TAB_X, tab_y(i), TAB_W, TAB_H, HIT_TAB + i)) hover_frame(TAB_X, tab_y(i), TAB_W, TAB_H);
-    button(TAB_X, tab_y(i), TAB_W, TAB_H, &f28, lit ? look.text_active : look.text, lit ? look.active : look.button,
+    int h = tab_h();
+    if (hit_add(TAB_X, tab_y(i), TAB_W, h, HIT_TAB + i)) hover_frame(TAB_X, tab_y(i), TAB_W, h);
+    button(TAB_X, tab_y(i), TAB_W, h, h < TAB_H ? &f27 : &f28, lit ? look.text_active : look.text, lit ? look.active : look.button,
            GFX_ALPHA, tab_names[i]);
-    if (chosen && !lit) marker(TAB_X, tab_y(i), TAB_H, look.button);
+    if (chosen && !lit) marker(TAB_X, tab_y(i), h, look.button);
   }
 }
 
@@ -184,18 +196,29 @@ static void draw_color(void) {
 
 static void draw_dialog(void) {
   int w = 400, h = 160, x = (FB_W - w) / 2, y = (FB_H - h) / 2;
+  char t[40], sub[48], *p;
+  const char *left = "Drop", *right = "Stay";
+  if (dlg == DLG_MODE) {
+    // the mode tried: kept, or back to the one before after MODE_TEST_S (a monitor that does not take it)
+    uint32_t gone = (R_MS - mode_t0) / 1000;
+    settings_value_text(S_VIDEO, sub, sizeof(sub));
+    str_cpy(str_cpy(str_cpy(t, "Keep "), sub), "?");
+    p = str_cpy(sub, "Back to "); p = str_cpy(p, mode_old ? "800x600" : "640x480"); p = str_cpy(p, " in ");
+    p = u2s(p, gone < MODE_TEST_S ? MODE_TEST_S - gone : 0, 1); str_cpy(p, " s");
+    left = "Keep"; right = "Back";
+  } else { str_cpy(t, "Drop the changes?"); str_cpy(sub, "They are not saved"); }
   hit_clear();                   // only the buttons of the dialog take clicks
   ft_rect(x - 3, y - 3, w + 6, h + 6, 8, look.active, GFX_ALPHA);
   ft_rect(x, y, w, h, 8, look.button, (int32_t) look.active);
-  gfx_text_center(&f29, x + w / 2, y + 30, "Drop the changes?", gfx_ramp_over(look.text, look.button));
-  gfx_text_center(&f27, x + w / 2, y + 66, "They are not saved", gfx_ramp_over(look.copyright, look.button));
+  gfx_text_center(&f29, x + w / 2, y + 30, t, gfx_ramp_over(look.text, look.button));
+  gfx_text_center(&f27, x + w / 2, y + 66, sub, gfx_ramp_over(look.copyright, look.button));
   int by = y + h - 56;
   if (hit_add(x + 40, by, 140, TAB_H, HIT_DLG_LEFT)) ft_rect(x + 40, by, 140, TAB_H, 2, look.active, (int32_t) look.button);
   if (hit_add(x + w - 180, by, 140, TAB_H, HIT_DLG_RIGHT)) ft_rect(x + w - 180, by, 140, TAB_H, 2, look.active, (int32_t) look.button);
   button(x + 40, by, 140, TAB_H, &f28, dialog_left ? look.text_active : look.text, dialog_left ? look.active : look.bg,
-         (int32_t) look.button, "Drop");
+         (int32_t) look.button, left);
   button(x + w - 180, by, 140, TAB_H, &f28, !dialog_left ? look.text_active : look.text, !dialog_left ? look.active : look.bg,
-         (int32_t) look.button, "Stay");
+         (int32_t) look.button, right);
 }
 
 static void draw_footer(void) {
@@ -242,8 +265,8 @@ static void draw(void) {
   else if (custom_page()) {
     title(tab_names[tab]);
     int y = TOP + 40, focused = focus == F_CUSTOM;
-    if (!focused) hit_add(PANEL_X, y, PANEL_W, FB_H - 56 - y, HIT_PANEL);   // a click opens it
-    custom_page()->draw(PANEL_X, y, PANEL_W, FB_H - 56 - y, focused);
+    if (!focused) hit_add(PANEL_X, y, PANEL_W, FB_H - FOOTER_H - y, HIT_PANEL);   // a click opens it
+    custom_page()->draw(PANEL_X, y, PANEL_W, FB_H - FOOTER_H - y, focused);
   }
   draw_footer();
   if (focus == F_DIALOG) draw_dialog();
@@ -299,6 +322,7 @@ static void open_tab(void) {
       break;
     case T_CANCEL:
       settings_revert();
+      video_set(set_val[S_VIDEO]);
       leave();
       break;
     default:
@@ -317,8 +341,22 @@ static void open_tab(void) {
 static void change(int d) {
   int id = cur_id();
   if (settings[id].kind == SK_PAGE) { if (d > 0) { mx_page = 1; row = 0; } return; }
+  if (id == S_VIDEO) {
+    // tried at once (firmware app_ft_setup: the mode test): a dialog keeps it or goes back
+    mode_old = set_val[S_VIDEO];
+    settings_change(id, d);
+    if (set_val[S_VIDEO] == mode_old) return;
+    video_set(set_val[S_VIDEO]);
+    focus = F_DIALOG; dlg = DLG_MODE; dialog_left = 1; mode_t0 = R_MS;
+    return;
+  }
   settings_change(id, d);
   if (id == S_SOUND) snd_start(set_val[S_SOUND]);   // heard as it is chosen (Off stops it)
+}
+
+static void mode_end(int keep) {
+  if (!keep) { set_val[S_VIDEO] = mode_old; video_set(mode_old); }
+  focus = F_PAGE;
 }
 
 static void enter_row(void) {
@@ -350,7 +388,7 @@ static void handle(const keys_t *k) {
       if (k->up) tab = (tab + T_COUNT - 1) % T_COUNT;
       else if (k->down || k->tab) tab = (tab + 1) % T_COUNT;
       else if (k->enter || (k->right && tab < T_SAVE)) open_tab();
-      else if ((k->esc || (k->left && !k->repeat)) && settings_differ()) { focus = F_DIALOG; dialog_left = 0; }
+      else if ((k->esc || (k->left && !k->repeat)) && settings_differ()) { focus = F_DIALOG; dlg = DLG_DROP; dialog_left = 0; }
       else if (k->esc || (k->left && !k->repeat)) { leave(); return; }   // Left: the sections are the top
       break;
     case F_PAGE: {
@@ -373,7 +411,8 @@ static void handle(const keys_t *k) {
       break;
     case F_DIALOG:
       if (k->left || k->right) dialog_left = !dialog_left;
-      else if (k->enter && dialog_left) { settings_revert(); leave(); return; }
+      else if (dlg == DLG_MODE && (k->enter || k->esc)) mode_end(k->enter && dialog_left);
+      else if (k->enter && dialog_left) { settings_revert(); video_set(set_val[S_VIDEO]); leave(); return; }
       else if (k->enter || k->esc) focus = F_TABS;
       break;
   }
@@ -710,8 +749,14 @@ static const cpage_t *custom_page(void) {
 }
 
 void setup_tick(void) {
-  static uint32_t t_clock = 0;
+  static uint32_t t_clock = 0, t_mode = 0;
   esp_pump();
+  if (focus == F_DIALOG && dlg == DLG_MODE) {
+    // the countdown of the mode tried, then back to the one before
+    if (R_MS - mode_t0 >= MODE_TEST_S * 1000) { mode_end(0); draw(); return; }
+    if (R_MS - t_mode >= 1000) { t_mode = R_MS; draw(); }
+    return;
+  }
   const cpage_t *p = custom_page();
   if (p && p->tick && p->tick()) { draw(); return; }
   if (R_MS - t_clock >= 1000) { t_clock = R_MS; pointer_hide(); draw_clock(); pointer_show(); }

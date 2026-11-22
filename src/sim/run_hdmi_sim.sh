@@ -1,6 +1,7 @@
 #!/bin/bash
-# tb_hdmi_top (ISim): hdmi_top with zhdmi (karabas-go-modules), the video of the menu at 40.9 MHz and the FT812
-# at 65.5 / 40.9 MHz through hdmi_pll, the pixels and the audio samples where they enter hdmi_tx.
+# tb_hdmi_top (ISim): hdmi_top with zhdmi (karabas-go-modules), the video of the menu in 640 x 480 (25 MHz) and
+# 800 x 600 (40 MHz) through the BUFGMUX of the pixel clock and hdmi_pll, the pixels and the audio samples where
+# they enter hdmi_tx.
 # zhdmi runs as a Verilog netlist of ghdl --synth: ISim 14.7 stops with an internal error in
 # zhdmi_island_encoder.vhd, and ghdl needs two runs, dvi.vhd is VHDL-2008 and zhdmi_packet_gen.vhd
 # VHDL-93 (karabas-go-modules sim/lint/ghdl_check.py); for this the copy of zhdmi_tx.vhd takes dvi
@@ -47,11 +48,9 @@ ghdl --synth --std=08 --ieee=synopsys --workdir=w08 --out=verilog "$H/dvi_encode
 set --
 source "$SETTINGS" > /dev/null
 cat > tb_hdmi_top.prj <<PRJ
-vhdl work "$SRC/rtl/hdmi/freq_counter.vhd"
 verilog work "hdmi_tx_vhdl.v"
 verilog work "dvi_vhdl.v"
 verilog work "$H/pll_reset.v"
-verilog work "$MOD/rtl/mem/kg_async_fifo.v"
 verilog work "$SRC/rtl/hdmi/hdmi_pll.v"
 verilog work "$SRC/rtl/hdmi/hdmi_top.v"
 verilog work "$SIM/tb_hdmi_top.v"

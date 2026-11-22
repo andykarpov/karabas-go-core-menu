@@ -1,50 +1,46 @@
 `timescale 1ns / 1ps
 
-// hdmi_top (rtl/hdmi/hdmi_top.v), ISim with the unisim models of the DCMs and clock buffers:
-// the video of the menu (40.9 MHz), then of the FT812 at 65.5, 40.9 and 24.5 MHz (8.18 MHz x 8, x 5 and x 3; the
-// last two are the modes 1 and 0 of the firmware; hdmi_pll measures the clock and programs DCM_CLKGEN), checked
-// where it enters hdmi_tx (host_vga_*).
-// The FT812 changes its clock before ft_sel goes up (the firmware sets its mode, then turns its video on): the
-// frequency is measured then, and must be taken when ft_sel goes up; the second FT mode has the frequency of the
-// menu, which the old code did not program either (it measured clk_ref in the mode of the menu).
-// Checked:
+// hdmi_top (rtl/hdmi/hdmi_top.v), ISim with the unisim models of the DCM and the clock buffers: the video of the
+// menu in its two modes, the pixel clock a BUFGMUX of 25 and 40 MHz as in the tops (the select from a clk_ref
+// flip-flop): 640 x 480 (25 MHz), 800 x 600 (40 MHz), and back and forth; hdmi_pll resets its 5x DCM on each
+// change. Checked where the video enters hdmi_tx (host_vga_*):
 // - every active pixel of a frame in order: the pixel value is its index in the frame (24 bits,
 //   so a bit taken from the wrong place shows), a frame has all of them, each line its hsync;
+// - the 5x DCM locked again after a switch;
 // - the audio samples: audio_l counts the clocks of clk_ref, audio_r is its complement, so a
 //   sample must be r = ~l (both halves of one sample) and the step from the sample before must
-//   be CLKRATE / SAMPLERATE clocks; the number of samples per phase gives the rate.
-// - the FT812 back at the frequency of its last mode (after the menu) is programmed again;
-// - one DCM_CLKGEN programming at a time: no hdmi_reset while a sequence is shifted out (a second one
-//   sent its first bit twice: LoadM instead of LoadD).
+//   be CLKRATE / SAMPLERATE clocks; the number of samples per phase gives the rate (the same in both modes).
 // Ends with "tb_hdmi_top: N errors".
 
 module tb_hdmi_top;
 
 parameter SAMPLERATE = 48000;
-localparam integer SAMPLE_DIV = 40909091 / SAMPLERATE;
+localparam integer SAMPLE_DIV = 40000000 / SAMPLERATE;
 
-// frame of the generators (small, so a phase has several frames)
+// frame of the generator (small, so a phase has several frames)
 localparam H_TOTAL = 320, H_ACTIVE = 192, HS_START = 220, HS_LEN = 24;
 localparam V_TOTAL = 24, V_ACTIVE = 16, VS_START = 18, VS_LEN = 2;
 localparam ACTIVE_PIX = H_ACTIVE * V_ACTIVE;
 
-reg clk_ref = 1'b0, clk_8 = 1'b0, ft_clk = 1'b0;
-always #12.222 clk_ref = ~clk_ref;   // 40.91 MHz (450 / 11)
-always #61.111 clk_8 = ~clk_8;       // 8.18 MHz (450 / 55)
-real ft_half = 7.639;                // 65.45 MHz (8.18 x 8)
-always #(ft_half) ft_clk = ~ft_clk;
+reg clk_ref = 1'b0, clk_25 = 1'b0;
+always #12.5 clk_ref = ~clk_ref;     // 40 MHz (600 / 15): clk_sys and the pixel clock of 800 x 600
+always #20 clk_25 = ~clk_25;         // 25 MHz (600 / 24)
 
 reg reset = 1'b1;
-reg ft_sel = 1'b0;
+reg mode = 1'b0;                     // the VMODE of the CPU, in clk_ref as in the tops
+reg mode_sys = 1'b0;
+always @(posedge clk_ref) mode_sys <= mode;
+wire clk_pix;
+BUFGMUX bufgmux_pix(.I0(clk_25), .I1(clk_ref), .O(clk_pix), .S(mode_sys));
 
-// ---------------- video generators ----------------
+// ---------------- the video ----------------
 
-// the core: outputs change with the falling clock (hdmi_top takes them at the rising one)
+// outputs change with the rising pixel clock (the registers of the overlay), hdmi_top takes them at the next one
 reg [9:0] vh = 10'd0, vv = 10'd0;
 reg [23:0] vpix = 24'd0;
 reg [23:0] vga_rgb = 24'd0;
 reg vga_hs = 1'b0, vga_vs = 1'b0, vga_de = 1'b0;
-always @(negedge clk_ref) begin
+always @(posedge clk_pix) begin
 	vh <= (vh == H_TOTAL - 1) ? 10'd0 : vh + 10'd1;
 	if (vh == H_TOTAL - 1) vv <= (vv == V_TOTAL - 1) ? 10'd0 : vv + 10'd1;
 	vga_de <= (vh < H_ACTIVE) && (vv < V_ACTIVE);
@@ -59,26 +55,6 @@ always @(negedge clk_ref) begin
 	if (vh == H_TOTAL - 1 && vv == V_TOTAL - 1) vpix <= 24'd0;
 end
 
-// the FT812: outputs change with the rising FT_CLK (hdmi_top takes them at the falling one)
-reg [9:0] fh = 10'd0, fv = 10'd0;
-reg [23:0] fpix = 24'd0;
-reg [23:0] ft_rgb = 24'd0;
-reg ft_hs = 1'b0, ft_vs = 1'b0, ft_de = 1'b0;
-always @(posedge ft_clk) begin
-	fh <= (fh == H_TOTAL - 1) ? 10'd0 : fh + 10'd1;
-	if (fh == H_TOTAL - 1) fv <= (fv == V_TOTAL - 1) ? 10'd0 : fv + 10'd1;
-	ft_de <= (fh < H_ACTIVE) && (fv < V_ACTIVE);
-	ft_hs <= (fh >= HS_START) && (fh < HS_START + HS_LEN);
-	ft_vs <= (fv >= VS_START) && (fv < VS_START + VS_LEN);
-	if ((fh < H_ACTIVE) && (fv < V_ACTIVE)) begin
-		ft_rgb <= fpix;
-		fpix <= fpix + 24'd1;
-	end
-	else
-		ft_rgb <= 24'h5A5A5A;
-	if (fh == H_TOTAL - 1 && fv == V_TOTAL - 1) fpix <= 24'd0;
-end
-
 // audio: changes every clock of clk_ref
 reg [15:0] audio_l = 16'd0;
 always @(negedge clk_ref) audio_l <= audio_l + 16'd1;
@@ -87,13 +63,11 @@ wire [15:0] audio_r = ~audio_l;
 // ---------------- DUT ----------------
 
 wire [3:0] tmds_p, tmds_n;
-wire [7:0] freq;
-hdmi_top #(.SAMPLERATE(SAMPLERATE)) dut(
-	.clk(ft_clk), .clk_ref(clk_ref), .clk_ref_pll(clk_ref), .clk_8(clk_8), .reset(reset),
+hdmi_top #(.SAMPLERATE(SAMPLERATE), .CLKRATE(40000000)) dut(
+	.clk_pix(clk_pix), .clk_ref(clk_ref), .mode(mode_sys), .reset(reset),
 	.vga_rgb(vga_rgb), .vga_hs(vga_hs), .vga_vs(vga_vs), .vga_de(vga_de),
-	.ft_rgb(ft_rgb), .ft_hs(ft_hs), .ft_vs(ft_vs), .ft_de(ft_de),
-	.ft_sel(ft_sel), .audio_en(1'b1), .audio_l(audio_l), .audio_r(audio_r),
-	.tmds_p(tmds_p), .tmds_n(tmds_n), .freq(freq)
+	.audio_en(1'b1), .audio_l(audio_l), .audio_r(audio_r),
+	.tmds_p(tmds_p), .tmds_n(tmds_n)
 );
 
 // ---------------- checks ----------------
@@ -148,11 +122,6 @@ always @(posedge pclk) begin
 	end
 end
 
-always @(posedge clk_ref) begin
-	if (dut.hdmi_pll.hdmi_reset && |dut.hdmi_pll.prog_en)
-		fail("hdmi_reset during a DCM_CLKGEN programming", dut.hdmi_pll.prog_en, 0);
-end
-
 integer samples = 0;
 reg have_prev = 1'b0;
 reg [15:0] prev_l = 16'd0;
@@ -175,24 +144,32 @@ end
 
 // ---------------- phases ----------------
 
+// the pixel clock measured over 10 us of clk_ref
+time t_pix0;
+integer n_pix = 0;
+always @(posedge pclk) n_pix = n_pix + 1;
+
 task automatic phase;
 	input [8*16-1:0] name;
-	input [7:0] exp_freq;
+	input integer exp_mhz;
 	input integer settle_us;
 	input integer check_us;
-	integer f0, s0, exp_samples;
+	integer f0, s0, exp_samples, p0, mhz;
 	begin
 		#(settle_us * 1000);
 		@(negedge clk_ref);
-		if (dut.hdmi_pll.hdmi_freq !== exp_freq) fail("detected frequency", dut.hdmi_pll.hdmi_freq, exp_freq);
 		if (dut.lockedx5 !== 1'b1) fail("DCM locked", dut.lockedx5, 1);
+		p0 = n_pix;
+		#10000;
+		mhz = (n_pix - p0) / 10;
+		if (mhz != exp_mhz) fail("pixel clock MHz", mhz, exp_mhz);
 		f0 = frames; s0 = samples;
 		checking = 1'b1;
 		#(check_us * 1000);
 		@(negedge clk_ref);
 		checking = 1'b0;
 		exp_samples = check_us * (SAMPLERATE / 1000) / 1000;
-		$display("%t %0s: %0d MHz, %0d frames, %0d samples (expected %0d)", $time, name, dut.hdmi_pll.hdmi_freq,
+		$display("%t %0s: %0d MHz, %0d frames, %0d samples (expected %0d)", $time, name, mhz,
 			frames - f0, samples - s0, exp_samples);
 		if (frames - f0 < 3) fail("frames checked", frames - f0, 3);
 		if (samples - s0 < exp_samples - 2 || samples - s0 > exp_samples + 2) fail("samples", samples - s0, exp_samples);
@@ -202,40 +179,13 @@ endtask
 initial begin
 	#1000;
 	@(negedge clk_ref) reset = 1'b0;
-	phase("menu 40.9 MHz", 8'd40, 3000, 1500);
-
-	@(negedge clk_ref) ft_sel = 1'b1;
-	phase("FT 65.5 MHz", 8'd64, 3500, 1500);
-
-	@(negedge clk_ref) ft_sel = 1'b0;
-	phase("menu 40.9 MHz", 8'd40, 1000, 1000);
-
-	ft_half = 12.222; // 40.91 MHz (8.18 x 5)
-	#3000000;
-	@(negedge clk_ref) ft_sel = 1'b1;
-	phase("FT 40.9 MHz", 8'd40, 3500, 1500);
-
-	@(negedge clk_ref) ft_sel = 1'b0;
-	phase("menu 40.9 MHz", 8'd40, 1000, 1000);
-
-	ft_half = 20.370; // 24.55 MHz (8.18 x 3)
-	#3000000;
-	@(negedge clk_ref) ft_sel = 1'b1;
-	phase("FT 24.5 MHz", 8'd24, 3500, 1500);
-
-	@(negedge clk_ref) ft_sel = 1'b0;
-	phase("menu 40.9 MHz", 8'd40, 1000, 1000);
-
-	// the FT812 picture again at the frequency it had (the menu, then G in the text OSD of the firmware):
-	// the frequency does not change, and DCM_CLKGEN must still be programmed, or the 5x DCM keeps the 40.9 MHz
-	// of the menu with no reset
-	#3000000;
-	@(negedge clk_ref) ft_sel = 1'b1;
-	phase("FT 24.5 again", 8'd24, 3500, 1500);
-
-	@(negedge clk_ref) ft_sel = 1'b0;
-	phase("menu 40.9 MHz", 8'd40, 1000, 1000);
-
+	phase("640x480 25 MHz", 25, 3000, 1500);
+	@(negedge clk_ref) mode = 1'b1;
+	phase("800x600 40 MHz", 40, 1000, 1500);
+	@(negedge clk_ref) mode = 1'b0;
+	phase("640x480 25 MHz", 25, 1000, 1500);
+	@(negedge clk_ref) mode = 1'b1;
+	phase("800x600 40 MHz", 40, 1000, 1500);
 	$display("tb_hdmi_top: %0d errors", errors);
 	$finish;
 end

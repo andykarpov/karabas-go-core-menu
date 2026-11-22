@@ -29,6 +29,9 @@ void look_apply(void);           // the background gradient (menu_compose) of th
 // ---- the picture: drawn into the buffer not shown, then shown at a frame start ----
 void scr_begin(void);            // the other buffer, cleared, its palette empty
 void scr_end(void);              // shown (waits for the frame start); the pointer goes on it
+// the video mode (MMIO VMODE): 0 640 x 480, 1 800 x 600; the screens are laid out for scr_w x scr_h (mmio.h)
+void video_set(int mode);        // the mode and scr_w / scr_h (the pointer kept on the screen); then draw the screen again
+int video_mode(void);
 // the parts every screen has: the logo, the clock (top right), the character
 void draw_logo(void);
 void draw_clock(void);           // reads the RTC (SYS TIME_GET); clears its place first

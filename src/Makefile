@@ -4,8 +4,7 @@
 #   make                 all the boards (boot.kg)
 #   make go|mini|minig   one board: synthesis, implementation, bitstream, .kg file
 #   make minig-xst       one step: <board>-xst (.ngc), <board>-impl (.bin), <board>-core (.kg)
-#   make minig-report    LUTs, slices, block RAMs and the timing result of the last build (and of -coremode)
-#   make minig-coremode  the timing of the last build in the mode of the core of HDMI (Mini, Mini G; see below)
+#   make minig-report    LUTs, slices, block RAMs and the timing result of the last build
 #   make clean           the intermediate files (not the .bin / .kg files, they are in git)
 #
 # Inputs per board: karabas_<board>.prj (the source list, the shared modules as
@@ -28,7 +27,7 @@ KG = boot.kg
 JSON = core.json
 
 # map / par options (as tsconf; the .xise projects of the menu had -global_opt speed), the cost table per board
-# The table only moves the placement; when -coremode misses, try another (see CLAUDE.md). With the SD2 pass-through
+# The table only moves the placement; when a build misses, try another (see CLAUDE.md). With the SD2 pass-through
 # (build 26102621) the Mini met all constraints with 1 (2 missed by 1.4 ns: hdmi_top ft_sel_s -> dc_bias of zhdmi),
 # the Mini G with 3 (1 and 2 missed by 0.7 ns: ft_fifo dout -> dc_bias), then 2 since the hdmi_pll fix (3 missed
 # minig-coremode by 0.76 ns in the 5x shift registers, a 4.3 ns route). Before it the Mini had 2 (1 missed by
@@ -46,12 +45,7 @@ PAR_OPT = -ol high -xe n -mt 4
 # included or read by the sources, not in the prj
 INCLUDES = $(wildcard ../modules/rtl/mcu/*.vh)
 
-.PHONY: all clean $(BOARDS) $(BOARDS:=-xst) $(BOARDS:=-impl) $(BOARDS:=-core) $(BOARDS:=-report) mini-coremode minig-coremode
-
-# The pixel clock of HDMI (Mini, Mini G) is a BUFGMUX of clk_sys and the FT812 clock: its flip-flops are on both,
-# and the ucf bounds the paths from clk_sys as asynchronous ones (TS_SYS_TO_PIX). <board>-coremode runs trce again
-# without the constraints of the FT mode (pcf_core.py): the paths clk_sys -> pixel clock with the setup and hold of
-# clk_sys, as they are in the mode of the menu. Run it after every build of these boards.
+.PHONY: all clean $(BOARDS) $(BOARDS:=-xst) $(BOARDS:=-impl) $(BOARDS:=-core) $(BOARDS:=-report)
 
 all: $(BOARDS)
 
@@ -80,26 +74,13 @@ $(1)-core: kg_$(1).stamp
 $(1)-report:
 	@grep -E "Number of (Slice LUTs|occupied Slices|RAMB16BWERs|RAMB8BWERs):" karabas_$(1)_map.mrp
 	@grep -E "constraints? (was|were) met|constraints? not met|Timing Score" karabas_$(1).par | sort -u
-	@if [ -f karabas_$(1)_core.twr ]; then echo "mode of the core (-coremode):"; \
-		grep -E "constraints? (was|were) met|constraints? not met|Timing errors" karabas_$(1)_core.twr | sort -u; fi
 endef
 
 $(foreach b,$(BOARDS),$(eval $(call board,$(b))))
-
-define core_mode
-$(1)-coremode: karabas_$(1)_core.twr
-karabas_$(1)_core.twr: karabas_$(1).bin pcf_core.py
-	python3 pcf_core.py karabas_$(1).pcf karabas_$(1)_core.pcf
-	$(XIL) trce -intstyle ise -v 3 -s 2 -n 3 -fastpaths karabas_$(1).ncd -o karabas_$(1)_core.twr karabas_$(1)_core.pcf \
-		| tee karabas_$(1)_core.log | grep -E "ERROR|WARNING" || true
-	@! grep -q "No timing constraints found" karabas_$(1)_core.twr || { echo "trce did not read karabas_$(1)_core.pcf"; \
-		rm -f karabas_$(1)_core.twr; exit 1; }
-endef
-$(foreach b,mini minig,$(eval $(call core_mode,$(b))))
 
 clean:
 	rm -f kg_*.stamp
 	rm -rf xst _ngo _xmsgs xlnx_auto_0_xdb iseconfig
 	rm -f $(foreach b,$(BOARDS),$(addprefix karabas_$(b),.ngc .ngd .ngr .syr .lso .bld .pcf .ncd _map.ncd _map.ngm \
 		_map.map _map.mrp _map.xrpt .par .pad _pad.csv _pad.txt .twr .twx .unroutes .xpi .ptwx .bgn .bit .drc \
-		_bitgen.xwbt _summary.xml _usage.xml _xst.xrpt _ngdbuild.xrpt _par.xrpt _guide.ncd _core.pcf _core.twr _core.log))
+		_bitgen.xwbt _summary.xml _usage.xml _xst.xrpt _ngdbuild.xrpt _par.xrpt _guide.ncd))

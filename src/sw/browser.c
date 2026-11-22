@@ -67,7 +67,7 @@ void cores_read(void) {
 
 #define CORE_TOP 88
 #define CORE_STEP 40
-#define PAGE ((FB_H - 60 - CORE_TOP) / CORE_STEP)   // 11
+#define PAGE ((FB_H - 60 - CORE_TOP) / CORE_STEP)   // 11 in 800 x 600, 8 in 640 x 480
 #define BX (FB_W / 4 + 8)
 #define BW (FB_W / 2 - 16)
 #define BH 32
@@ -122,7 +122,7 @@ static void draw_arrow(int next) {
 static void draw_footer(void) {
   char b[48], *p;
   ramp_t copy = gfx_ramp_alpha(look.copyright);
-  gfx_clear(240, FB_H - 56, 320, 52);
+  gfx_clear(FB_W / 2 - 124, FB_H - 56, 248, 52);   // the pager and the autoload line, not the build on the left
   p = str_cpy(b, "Page "); p = u2s(p, page_of(sel) + 1, 1); p = str_cpy(p, " of "); u2s(p, pages(), 1);
   gfx_text_center(&f27, FB_W / 2, FB_H - 40, b, copy);
   draw_arrow(0);

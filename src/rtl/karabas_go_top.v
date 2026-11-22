@@ -169,12 +169,14 @@ wire snd_t;
 wire [7:0] midi_data;
 wire midi_wr;
 
-// VCO 50 * 18 / 2 = 450 MHz, phase 0: clk_sys 40.91 MHz (/11: the 800 x 600 video, the DAC), 12.16 MHz
-// (/37: MIDI_CLK), clk_cpu 75 MHz (/6: the menu CPU, the SRAM, the MCU link, the ESP and MIDI uarts)
+// VCO 50 * 12 = 600 MHz, phase 0: clk_sys 40 MHz (/15: the DAC; the pixel clock of 800 x 600), 12.24 MHz (/49:
+// MIDI_CLK), clk_cpu 75 MHz (/8: the menu CPU, the SRAM, the MCU link, the ESP and MIDI uarts), 25 MHz (/24: the
+// pixel clock of 640 x 480). The PLL outputs of 40 and 25 MHz have no BUFG in kg_pll: 40 MHz drives the BUFG of
+// clk_sys, both the BUFGMUX of the pixel clock clk_pix (below).
 wire [5:0] pll_clk;
 kg_pll #(
-	.DIVCLK_DIVIDE(2), .CLKFBOUT_MULT(18),
-	.CLKOUT0_DIVIDE(11), .CLKOUT1_DIVIDE(37), .CLKOUT2_DIVIDE(6),
+	.DIVCLK_DIVIDE(1), .CLKFBOUT_MULT(12),
+	.CLKOUT0_DIVIDE(15), .CLKOUT1_DIVIDE(49), .CLKOUT2_DIVIDE(8), .CLKOUT3_DIVIDE(24),
 	.BUFG_MASK(6'b000110)
 ) pll (
 	.clk_in				(CLK_50MHZ),
@@ -186,6 +188,16 @@ assign clk_12mhz = pll_clk[1];
 assign clk_cpu = pll_clk[2];
 BUFG bufg_clk_sys(.I(pll_clk[0]), .O(clk_sys)); // in the top, as on the Mini / Mini G (the net of the ucf)
 assign areset = ~locked;
+
+// the pixel clock: 25 MHz (640 x 480) or 40 MHz (800 x 600) by the VMODE register of the CPU (clk_cpu), through a
+// flip-flop of clk_sys. The BUFGMUX switches without a glitch (both inputs run); its select is a net of its own,
+// out of the timing analysis (ucf).
+wire vmode;                       // menu_soc, clk_cpu
+wire vmode_sys;
+kg_sync #(.W(1)) sync_vmode (.clk(clk_sys), .d(vmode), .q(vmode_sys));
+(* KEEP = "TRUE" *) wire pix_sel = vmode_sys;
+wire clk_pix;
+BUFGMUX bufgmux_pix(.I0(pll_clk[3]), .I1(pll_clk[0]), .O(clk_pix), .S(pix_sel));
 
 // the reset of the clk_cpu side, synchronous to it
 reg [1:0] areset_cpu = 2'b11;
@@ -207,22 +219,24 @@ assign FT_SPI_MOSI 	= mcu_ft_spi_on ? mcu_ft_mosi : 1'b1;
 assign FT_OE_N 		= ~vdac2_sel;
 
 // vga / ft mux. The video DAC takes the pixels with the rising V_CLK: in the mode of the menu it is the inverted
-// clk_sys, the middle of the pixel. The pixels and syncs leave flip-flops of the pads, a clock later both.
+// clk_pix, the middle of the pixel. The pixels and syncs leave flip-flops of the pads, a clock later both; the
+// syncs of 640 x 480 are negative (mode_pix 0), those of 800 x 600 positive.
+wire mode_pix;                    // menu_video: vmode in clk_pix
 reg [7:0] vga_r_q = 8'd0, vga_g_q = 8'd0, vga_b_q = 8'd0;
 reg vga_hs_q = 1'b0, vga_vs_q = 1'b0;
-always @(posedge clk_sys) begin
+always @(posedge clk_pix) begin
 	vga_r_q <= osd_r;
 	vga_g_q <= osd_g;
 	vga_b_q <= osd_b;
-	vga_hs_q <= video_hs;
-	vga_vs_q <= video_vs;
+	vga_hs_q <= video_hs ^ ~mode_pix;
+	vga_vs_q <= video_vs ^ ~mode_pix;
 end
 assign VGA_R[7:0] 	= (vdac2_sel ? 8'bZZZZZZZZ : vga_r_q);
 assign VGA_G[7:0] 	= (vdac2_sel ? 8'bZZZZZZZZ : vga_g_q);
 assign VGA_B[7:0] 	= (vdac2_sel ? 8'bZZZZZZZZ : vga_b_q);
 assign VGA_HS 			= (vdac2_sel ? 1'bZ : vga_hs_q);
 assign VGA_VS 			= (vdac2_sel ? 1'bZ : vga_vs_q);
-assign V_CLK 			= (vdac2_sel ? FT_CLK : ~clk_sys);
+assign V_CLK 			= (vdac2_sel ? FT_CLK : ~clk_pix);
 
 //---------- DAC ------------
 // the PCM sounds of the menu (menu_sound, clk_cpu: a value with each snd_t toggle); the Go has no ADC here
@@ -373,7 +387,7 @@ menu_soc soc (
     .kbd(kbd), .kbd_wr(kbd_wr), .ms_x(ms_x), .ms_y(ms_y), .ms_z(ms_z), .ms_b(ms_b), .ms_wr(ms_wr), .joy_l(joy_l), .joy_r(joy_r),
     .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
     .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .fb_sel(fb_sel), .fb_shown(fb_shown),
-    .frame_t(frame_t), .show(fb_show), .grad_top(grad_top), .grad_bot(grad_bot),
+    .frame_t(frame_t), .show(fb_show), .vmode(vmode), .grad_top(grad_top), .grad_bot(grad_bot),
     .snd_out(snd_out), .snd_t(snd_t),
     .midi_data(cpu_midi_data), .midi_wr(cpu_midi_wr), .midi_full(cpu_midi_full),
     .esp_rx_data(esp_uart_rx_data), .esp_rx_valid(esp_uart_rx_wr && esp_own), .esp_rx_ack(cpu_esp_ack),
@@ -388,15 +402,15 @@ generate for (gi = 0; gi < 16; gi = gi + 1) begin : g_md
 end endgenerate
 
 //--------- video ---------
-// the frame buffer of the CPU (800 x 600, the timing of the old vga_sync), 4 clocks after its counters
+// the frame buffer of the CPU (640 x 480 or 800 x 600, VMODE), 4 clocks after its counters
 wire [27:0] fb_rgba;
 wire fb_on, vga_hs, vga_vs, vga_de;
 menu_video video (
     .clk_cpu(clk_cpu),
     .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
-    .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .show(fb_show), .fb_sel(fb_sel), .fb_shown(fb_shown),
+    .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .show(fb_show), .vmode(vmode), .fb_sel(fb_sel), .fb_shown(fb_shown),
     .frame_t(frame_t),
-    .clk_pix(clk_sys), .rgba(fb_rgba), .show_o(fb_on), .hs(vga_hs), .vs(vga_vs), .de(vga_de)
+    .clk_pix(clk_pix), .rgba(fb_rgba), .show_o(fb_on), .mode_o(mode_pix), .hs(vga_hs), .vs(vga_vs), .de(vga_de)
 );
 
 //--------- background ---------
@@ -406,19 +420,19 @@ menu_video video (
 wire [23:0] bg_rgb;
 wire bg_hs, bg_vs, bg_de;
 menu_compose compose(
-    .clk(clk_sys), .rgba_i(fb_rgba), .show_i(fb_on), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
+    .clk(clk_pix), .mode(mode_pix), .rgba_i(fb_rgba), .show_i(fb_on), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
     .glow_i(24'd0), .grad_top(grad_top), .grad_bot(grad_bot),
     .rgb_o(bg_rgb), .hs_o(bg_hs), .vs_o(bg_vs), .de_o(bg_de)
 );
 
 //--------- OSD --------------
-// the bitmap OSD over the picture of the menu, scale 2 (512 x 256 of 800 x 600); the VGA pins take the
+// the bitmap OSD over the picture of the menu, scale 2 (512 x 256 of 640 x 480 or 800 x 600); the VGA pins take the
 // syncs as they come out of the overlay
 kg_l2_osd_overlay #(.SCALE(2)) overlay(
     .wclk(clk_cpu), .osd_wr(osd_wr), .osd_waddr(osd_waddr), .osd_wdata(osd_wdata), .osd_en(osd_en),
     .osd_fg(osd_fg), .osd_bg(osd_bg), .osd_alpha(osd_alpha), .osd_px(osd_px), .osd_py(osd_py),
     .osd_pw(osd_pw), .osd_ph(osd_ph), .osd_place(osd_place), .osd_zoom(osd_zoom),
-    .clk(clk_sys), .rgb_i(bg_rgb), .hs_i(bg_hs), .vs_i(bg_vs), .de_i(bg_de),
+    .clk(clk_pix), .rgb_i(bg_rgb), .hs_i(bg_hs), .vs_i(bg_vs), .de_i(bg_de),
     .rgb_o({ osd_r, osd_g, osd_b }), .hs_o(video_hs), .vs_o(video_vs), .de_o(video_de)
 );
 

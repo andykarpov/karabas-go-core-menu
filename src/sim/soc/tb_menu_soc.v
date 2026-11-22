@@ -17,6 +17,7 @@ module tb_menu_soc (
 	output wire cpu_run,
 	output wire [23:0] rgb,
 	output wire show_o,
+	output wire vmode,                     // the video mode of the CPU (the .cpp sets the pixel clock by it)
 	output wire hs,
 	output wire vs,
 	output wire de,
@@ -65,7 +66,7 @@ wire [8:0] pal_wa;
 wire [27:0] pal_wd;
 wire [23:0] grad_top, grad_bot;
 wire [27:0] rgba;
-wire v_hs, v_vs, v_de, v_show;
+wire v_hs, v_vs, v_de, v_show, v_mode;
 wire [20:0] MA;
 wire [15:0] MD_O, MD_OE_N;
 wire [1:0] MWR_N, MRD_N;
@@ -84,7 +85,7 @@ menu_soc #(.CLR_LAST(21'h00FFFF)) soc (
 	.joy_l(16'd0), .joy_r(16'd0),
 	.vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
 	.pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .fb_sel(fb_sel), .fb_shown(fb_shown),
-	.frame_t(frame_t), .show(show), .grad_top(grad_top), .grad_bot(grad_bot),
+	.frame_t(frame_t), .show(show), .vmode(vmode), .grad_top(grad_top), .grad_bot(grad_bot),
 	.rpc_a(rpc_a), .rpc_we(rpc_we), .rpc_wd(rpc_wd), .rpc_rd(rpc_rd),
 	.snd_out(snd_out), .snd_t(snd_t), .midi_data(midi_data), .midi_wr(midi_wr), .midi_full(1'b0),
 	.esp_rx_data(esp_rx_data), .esp_rx_valid(esp_rx_wr && esp_own), .esp_rx_ack(esp_rx_ack),
@@ -96,13 +97,13 @@ menu_soc #(.CLR_LAST(21'h00FFFF)) soc (
 menu_video video (
 	.clk_cpu(clk_cpu),
 	.vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
-	.pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .show(show), .fb_sel(fb_sel), .fb_shown(fb_shown),
+	.pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .show(show), .vmode(vmode), .fb_sel(fb_sel), .fb_shown(fb_shown),
 	.frame_t(frame_t),
-	.clk_pix(clk_pix), .rgba(rgba), .show_o(v_show), .hs(v_hs), .vs(v_vs), .de(v_de)
+	.clk_pix(clk_pix), .rgba(rgba), .show_o(v_show), .mode_o(v_mode), .hs(v_hs), .vs(v_vs), .de(v_de)
 );
 // the picture as the top makes it: menu_compose, black before the first frame of the CPU
 menu_compose compose (
-	.clk(clk_pix), .rgba_i(rgba), .show_i(v_show), .hs_i(v_hs), .vs_i(v_vs), .de_i(v_de),
+	.clk(clk_pix), .mode(v_mode), .rgba_i(rgba), .show_i(v_show), .hs_i(v_hs), .vs_i(v_vs), .de_i(v_de),
 	.glow_i(24'd0), .grad_top(grad_top), .grad_bot(grad_bot),
 	.rgb_o(rgb), .hs_o(hs), .vs_o(vs), .de_o(de)
 );

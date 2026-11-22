@@ -14,10 +14,9 @@
  glow_i. grad_top / grad_bot are registers of the CPU clock, stable while they are used (written
  when the menu starts or the colours change).
 */
-module menu_compose #(
-	parameter [9:0] V_GRAD = 10'd450   // lines of the gradient (3/4 of 600)
-) (
+module menu_compose (
 	input wire clk,
+	input wire mode,                   // clk: 1 800 x 600 (gradient 450 lines), 0 640 x 480 (360)
 	input wire [27:0] rgba_i,          // { alpha, r, g, b }
 	input wire show_i,
 	input wire hs_i,
@@ -52,7 +51,9 @@ reg [8:0] t = 9'd0;
 reg [2:0] step = 3'd0;
 reg signed [17:0] dr = 18'sd0, dg = 18'sd0, db = 18'sd0;
 reg [11:0] line_r = 12'd0, line_g = 12'd0, line_b = 12'd0;
-wire [17:0] t_prod = { 8'd0, y } * 18'd146;    // 256 / 450 * 256 = 145.6
+// lines of the gradient: 3/4 of the height
+wire [9:0] V_GRAD = mode ? 10'd450 : 10'd360;
+wire [17:0] t_prod = { 8'd0, y } * (mode ? 18'd146 : 18'd182);    // 256 / 450 * 256 = 145.6, 256 / 360 * 256 = 182.0
 function signed [17:0] dmul(input [7:0] a, input [7:0] b, input [8:0] tt);
 	dmul = ($signed({ 1'b0, b }) - $signed({ 1'b0, a })) * $signed({ 1'b0, tt });
 endfunction

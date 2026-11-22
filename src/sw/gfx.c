@@ -63,7 +63,7 @@ void gfx_keep_off(void) { keep_on = 0; }
 
 static inline void pset(int x, int y, uint8_t c) {
   if (keep_on && x >= keep_x0 && x < keep_x1 && y >= keep_y0 && y < keep_y1) return;
-  if ((unsigned) x < FB_W && (unsigned) y < FB_H) fb[y * FB_W + x] = c;
+  if ((unsigned) x < FB_W && (unsigned) y < FB_H) fb[y * FB_STRIDE + x] = c;
 }
 
 static void span(volatile uint8_t *p, int w, uint8_t c) {
@@ -81,7 +81,7 @@ void gfx_fill(int x, int y, int w, int h, uint8_t c) {
   if (y + h > FB_H) h = FB_H - y;
   if (w <= 0 || h <= 0) return;
   for (int j = 0; j < h; j++) {
-    volatile uint8_t *p = fb + (y + j) * FB_W + x;
+    volatile uint8_t *p = fb + (y + j) * FB_STRIDE + x;
     int yy = y + j;
     if (keep_on && yy >= keep_y0 && yy < keep_y1 && x < keep_x1 && x + w > keep_x0) {
       int a = keep_x0 - x, b = x + w - keep_x1;     // the parts left and right of the kept one
@@ -251,7 +251,7 @@ void gfx_sprite_show(int x, int y, const char *const *art, int w, int h, uint8_t
       char c = art[j][i];
       if (c == ' ') continue;
       int px = x + i, py = y + j;
-      under[j * SPR_MAX_W + i] = ((unsigned) px < FB_W && (unsigned) py < FB_H) ? fb[py * FB_W + px] : 0;
+      under[j * SPR_MAX_W + i] = ((unsigned) px < FB_W && (unsigned) py < FB_H) ? fb[py * FB_STRIDE + px] : 0;
       pset(px, py, c == 'X' ? c_dark : c_light);
     }
   spr_on = 1;

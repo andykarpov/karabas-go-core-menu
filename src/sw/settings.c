@@ -6,6 +6,9 @@
 
 static const char *const core_sorts[] = { "Name", "File name", "Order" };
 static const char *const core_sort_keys[] = { "name", "file", "order" };
+// [ft812] video_mode: the modes of the FT812 menu of the firmware had these numbers; another number (the older
+// firmware had 15 modes) is 640 x 480, as the firmware took it
+static const char *const video_names[] = { "640x480", "800x600" };
 static const char *const sounds_names[] = { "Off", "Klyuchik", "Ta-dan", "Run", "Sound 4" };
 // the options of the matrix (firmware lib/common/matrix_style.c): karabas.ini has the names
 static const char *const mx_colors[] = { "Green", "Yellow", "Red" };
@@ -37,6 +40,7 @@ const setting_t settings[S_COUNT] = {
   B("Autoload",       "Start a core on power on",       "autoload", "enabled", 0),
   N("Timeout",        "Seconds before the start",       "autoload", "timeout", 61, 0, 15),
   { "Core",           "The core to start",              "autoload", "core", SK_OTHER, 0, 0, 0, 0, 0 },
+  C("Video mode",     "Left/Right: try it, then keep it",  "ft812", "video_mode", video_names, 0, 0),
   B("Show time",      "The clock at the top",           "ft812", "time", 1),
   B("Show date",      "The date under the clock",       "ft812", "date", 1),
   B("Character",      "The Karabas picture",            "ft812", "char", 1),
