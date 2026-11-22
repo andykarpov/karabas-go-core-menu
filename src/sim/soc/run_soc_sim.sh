@@ -1,6 +1,6 @@
 #!/bin/sh
 # tb_menu_soc (Verilator): menu_soc + menu_video + kg_l2_rpc, the program sw/build/menu.bin against a model of
-# the MCU (the core list over RPC, Down, Enter, LAUNCH), a frame -> frame.ppm
+# the MCU (the core list over RPC, Down, Enter, LAUNCH), a frame -> frame.ppm (640 x 480; the last run 800 x 600)
 set -e
 cd "$(dirname "$0")"
 make -s -C ../../sw
@@ -26,3 +26,6 @@ TB_SETUP=1 TB_FRAME=frame_setup_list.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/m
 # Wi-Fi: the section asks the status of the ESP over its uart (MMIO ESP / ESP_OWN, a model of the ESP)
 echo "tb_menu_soc: the Wi-Fi run"
 TB_WIFI=1 TB_FRAME=frame_wifi.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|ESP"
+# 800 x 600 ([ft812] video_mode=1): the CPU sets VMODE, the pixel clock and the frame follow; Setup in it
+echo "tb_menu_soc: the 800 x 600 run"
+TB_LOOK=video_mode=1 TB_SETUP=1 TB_FRAME=frame_800.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc"

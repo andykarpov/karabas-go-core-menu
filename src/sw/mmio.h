@@ -29,6 +29,7 @@ extern uint8_t host_fb[2][0x80000];
 #define R_WHEEL  MMIO(0x3c) // R: the wheel sum 11..0, + away from the user (reading clears)
 #define R_JOY    MMIO(0x38) // R: { joy_r, joy_l }
 #define R_US     MMIO(0x40) // R: microseconds since the start
+#define R_VMODE  MMIO(0x44) // W/R: bit 0 the video mode: 0 640 x 480 (after the start), 1 800 x 600
 #define R_PAL(b, i) MMIO(0x400 + 0x400 * (b) + 4 * (i)) // W: entry i of the palette of frame buffer b:
                                                      // 0xARRGGBB, alpha 0..15 (0 transparent, 15 opaque)
 
@@ -48,8 +49,11 @@ extern uint8_t host_fb[2][0x80000];
 #define RPC_EDONE 0x614
 #define RPC_FWVER 0x618
 
-#define FB_W 800
-#define FB_H 600
+// the screen: 640 x 480 or 800 x 600 (video_set, ui.c); a line of a frame buffer is FB_STRIDE bytes in both
+#define FB_STRIDE 800
+extern int scr_w, scr_h;
+#define FB_W scr_w
+#define FB_H scr_h
 #ifdef HOST
 #define FB0 ((volatile uint8_t *) host_fb[0])
 #define FB1 ((volatile uint8_t *) host_fb[1])

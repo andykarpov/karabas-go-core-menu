@@ -13,10 +13,14 @@
 
 static Vtb_menu_soc *t;
 static uint64_t now_ps = 0, next_cpu = 0, next_pix = 0;
-static const uint64_t P_CPU = 13333, P_PIX = 24444; // 75 MHz, 40.91 MHz
+static const uint64_t P_CPU = 13333;   // 75 MHz
+// the pixel clock by the VMODE register (the BUFGMUX of the tops): 25 MHz (640 x 480) or 40 MHz (800 x 600);
+// TB_LOOK=video_mode=1 gives 800 x 600 in karabas.ini
+static uint64_t p_pix(void) { return t->vmode ? 25000 : 40000; }
+static int W = 640, H = 480;           // the frame captured: the mode at its start
 static int errors = 0;
 static std::string console;
-static std::vector<uint32_t> frame(800 * 600);
+static std::vector<uint32_t> frame(640 * 480);
 static int cap_state = 0; // 0 wait, 1 waiting for vs, 2 capturing, 3 done
 static int px = 0, py = 0, de_p = 0, vs_p = 0;
 static std::vector<uint8_t> midi_bytes;
@@ -26,10 +30,14 @@ static std::vector<int16_t> snd_wave;   // the PCM out at 48 kHz
 
 static void on_pix_edge() {
   int de = t->de, vs = t->vs;
-  if (cap_state == 1 && vs && !vs_p) { cap_state = 2; px = 0; py = 0; }
+  if (cap_state == 1 && vs && !vs_p) {
+    cap_state = 2; px = 0; py = 0;
+    W = t->vmode ? 800 : 640; H = t->vmode ? 600 : 480;
+    frame.assign(W * H, 0);
+  }
   else if (cap_state == 2) {
-    if (de) { if (py < 600 && px < 800) frame[py * 800 + px] = t->rgb; px++; }
-    if (!de && de_p) { py++; px = 0; if (py == 600) cap_state = 3; }
+    if (de) { if (py < H && px < W) frame[py * W + px] = t->rgb; px++; }
+    if (!de && de_p) { py++; px = 0; if (py == H) cap_state = 3; }
   }
   de_p = de; vs_p = vs;
 }
@@ -39,7 +47,7 @@ static void step() {
   uint64_t n = nc < np ? nc : np;
   now_ps = n;
   if (n == nc) { t->clk_cpu = !t->clk_cpu; next_cpu += P_CPU / 2; }
-  if (n == np) { t->clk_pix = !t->clk_pix; next_pix += P_PIX / 2; }
+  if (n == np) { t->clk_pix = !t->clk_pix; next_pix += p_pix() / 2; }
   t->eval();
   if (n == np && t->clk_pix) on_pix_edge();
   if (n == nc && t->clk_cpu && t->midi_wr) midi_bytes.push_back(t->midi_data);
@@ -271,9 +279,10 @@ int main(int argc, char **argv) {
     cpu_clocks(200); n += 200;
     if (phase == 0 && console.find("menu: drawn") != std::string::npos) { phase = 1; t_phase = n; }
     else if (phase == 1 && getenv("TB_MOUSE") && n - t_phase > 300000) {
-      // TB_MOUSE: the pointer onto the fourth button (reports of +40 / +40 until there), then a frame
+      // TB_MOUSE: the pointer onto the fourth button (up from the middle of 640 x 480, y 240: three reports
+      // of -5 to y 225, the button is 208..240), then a frame
       static int moves = 0;
-      if (moves < 15) {
+      if (moves < 3) {
         t->ms_x = 0; t->ms_y = 0xFB; t->ms_b = 0; t->ms_wr = 1; cpu_clock(); t->ms_wr = 0; moves++; t_phase = n;
       } else if (n - t_phase > 400000) { phase = 6; cap_state = 1; t_phase = n; }
     }
@@ -333,14 +342,18 @@ int main(int argc, char **argv) {
   if (cap_state != 3) { printf("tb_menu_soc: no frame captured\n"); errors++; }
   else {
     FILE *o = fopen(getenv("TB_FRAME") ? getenv("TB_FRAME") : "frame.ppm", "wb");
-    fprintf(o, "P6 800 600 255\n");
+    fprintf(o, "P6 %d %d 255\n", W, H);
     for (uint32_t p : frame) { fputc(p >> 16, o); fputc((p >> 8) & 255, o); fputc(p & 255, o); }
     fclose(o);
     int white = 0, selc = 0;
     for (uint32_t p : frame) { if (p == 0xffffff) white++; if (p == 0x2850d8) selc++; }
     // the button of the second core (Agon after Down) in the active colour 0x0000c8, the first in
     // the button colour 0x202026 (the defaults of the firmware): a pixel left of the text
-    uint32_t b1 = frame[(88 + 16) * 800 + 220], b2 = frame[(88 + 40 + 16) * 800 + 220];
+    uint32_t b1 = frame[(88 + 16) * W + 220], b2 = frame[(88 + 40 + 16) * W + 220];
+    printf("tb_menu_soc: the frame is %d x %d\n", W, H);
+    const char *lk = getenv("TB_LOOK");
+    int want_w = lk && strstr(lk, "video_mode=1") ? 800 : 640;
+    if (W != want_w) { printf("tb_menu_soc: the video mode is not that of karabas.ini (%d wanted)\n", want_w); errors++; }
     if (white < 1000) { printf("tb_menu_soc: %d white pixels, no text\n", white); errors++; }
     if (getenv("TB_MOUSE") || getenv("TB_WIFI")) b1 = 0x202026, b2 = 0x0000c8;   // not the list  // the frame is before the clicks: not checked
     if (b2 != 0x0000c8) { printf("tb_menu_soc: the second button is not active (%06x)\n", b2); errors++; }
@@ -349,12 +362,14 @@ int main(int argc, char **argv) {
   }
   if (getenv("TB_SETUP")) {
     // the System section chosen and lit (the active colour), Autoload a button: a pixel left of the text
-    uint32_t s1 = setup_frame.size() == 800 * 600 ? setup_frame[(88 + 16) * 800 + 24] : 0;
-    uint32_t s2 = setup_frame.size() == 800 * 600 ? setup_frame[(128 + 16) * 800 + 24] : 0;
+    // the tabs: 40 px apart in 800 x 600, 32 in 640 x 480 (24 high)
+    int step = W == 800 ? 40 : 32, sz = (int) setup_frame.size();
+    uint32_t s1 = sz == W * H ? setup_frame[(88 + 12) * W + 24] : 0;
+    uint32_t s2 = sz == W * H ? setup_frame[(88 + step + 12) * W + 24] : 0;
     printf("tb_menu_soc: Setup frame, System %06x, Autoload %06x\n", s1, s2);
     if (s1 != 0x0000c8 || s2 != 0x202026) { printf("tb_menu_soc: Setup is not drawn\n"); errors++; }
     FILE *o = fopen("frame_setup.ppm", "wb");
-    fprintf(o, "P6 800 600 255\n");
+    fprintf(o, "P6 %d %d 255\n", W, H);
     for (uint32_t p : setup_frame) { fputc(p >> 16, o); fputc((p >> 8) & 255, o); fputc(p & 255, o); }
     fclose(o);
   }

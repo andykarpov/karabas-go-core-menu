@@ -1,5 +1,5 @@
 // The settings of karabas.ini that Setup shows (firmware ui/settings_items.c without the rows of the
-// FT812: Graphic menu, Video mode, 3D buttons), read and written over RPC CFG.
+// FT812: Graphic menu, 3D buttons), read and written over RPC CFG.
 #pragma once
 #include <stdint.h>
 
@@ -7,6 +7,7 @@ enum {
   S_DEBUG, S_DVI, S_CORE_SORT, S_MATRIX, S_MATRIX_BRIGHT, S_MX_EFFECTS,
   S_MX_HOURS, S_MX_MINUTES, S_MX_SECONDS, S_MX_SECONDS_COLOR, S_MX_STYLE, S_MX_COLORS, S_MX_DECAY, S_MX_PEAK,
   S_AUTOLOAD, S_TIMEOUT, S_CORE,
+  S_VIDEO,                       // [ft812] video_mode: 0 640 x 480, 1 800 x 600 (the numbers of the FT812 menu)
   S_TIME, S_DATE, S_CHAR, S_MOUSE,
   S_SOUND, S_CLICK,
   S_THEME, S_C_BG, S_C_GRADIENT, S_C_BUTTON, S_C_ACTIVE, S_C_TEXT, S_C_TEXT_ACTIVE, S_C_COPYRIGHT,

@@ -3,7 +3,9 @@
 /*
  menu_video.v
 
- The picture of the menu CPU: 800 x 600 at 60 Hz (the timing of vga_sync, clk_pix 40.91 MHz), a colour
+ The picture of the menu CPU in one of two VESA modes (vmode, the MMIO VMODE register): 640 x 480 at 60 Hz
+ (clk_pix 25 MHz, 800 x 525, syncs negative at the pins) or 800 x 600 at 60 Hz (clk_pix 40 MHz, 1056 x 628,
+ syncs positive); the top switches clk_pix between the two with a BUFGMUX. A colour
  index per pixel from one of the two frame buffers in the SRAM (FB0_HW / FB1_HW, halfword addresses;
  two pixels a halfword, the even pixel in the low byte), through the palette of that buffer (two banks of 256 x { alpha 4, RGB 24 }, bank = buffer:
  menu_compose blends it over the background). After
@@ -14,11 +16,14 @@
 
  Lines: line L + 1 is fetched into line buffer half (L + 1) & 1 at the start of line L (h 0), line 0
  during the last line of the frame; a toggle with the line to clk_cpu (menu_sram vid_* port, 400
- halfwords, about 11 us of the 25.8 us of a line). The other half holds the line being shown.
+ halfwords in 800 x 600, 320 in 640 x 480, about 11 us of a line of 26.4 / 32 us). The other half holds
+ the line being shown. A line of the frame buffer is 800 bytes in both modes (640 x 480 uses its left part).
 
- Output: hs / vs / de with the polarity of vga_sync (high active, as the overlay wants them), rgba the
- palette entry of the pixel (show: the MMIO SHOW register; 0 = transparent when off), 4 clocks after
- the counters.
+ Output: hs / vs / de high active (as the overlay wants them; the top inverts the syncs at the pins
+ when mode_o is 0, the negative syncs of 640 x 480), rgba the palette entry of the pixel (show: the MMIO
+ SHOW register; 0 = transparent when off), 4 clocks after the counters. A mode change takes effect at
+ once (the counters wrap at the limits of the new mode): the frame of the switch is broken, and the
+ monitor syncs to the new mode anyway.
 */
 module menu_video #(
 	parameter [20:0] FB0_HW = 21'h180000,    // byte 0x300000
@@ -35,6 +40,7 @@ module menu_video #(
 	input wire [8:0] pal_wa,               // { bank, entry }: bank = the frame buffer it is for
 	input wire [27:0] pal_wd,
 	input wire show,                       // clk_cpu
+	input wire vmode,                      // clk_cpu: 0 640 x 480, 1 800 x 600
 	input wire fb_sel,                     // clk_cpu
 	output wire fb_shown,                  // clk_cpu
 	output wire frame_t,                   // clk_cpu
@@ -42,16 +48,29 @@ module menu_video #(
 	input wire clk_pix,
 	output reg [27:0] rgba = 28'd0,
 	output reg show_o = 1'b0,              // the frame buffer is on (with rgb)
+	output wire mode_o,                    // clk_pix: vmode (the syncs: 0 negative at the pins)
 	output reg hs = 1'b0,
 	output reg vs = 1'b0,
 	output reg de = 1'b0
 );
 
-// 800 x 600 at 60 Hz, as vga_sync: the line counter steps at h 839
-localparam [10:0] H_VIS = 11'd800, H_SYNC_ON = 11'd839, H_SYNC_OFF = 11'd967, H_END = 11'd1055;
-localparam [9:0] V_VIS = 10'd600, V_SYNC_ON = 10'd600, V_SYNC_OFF = 10'd604, V_END = 10'd627;
+// VESA 640 x 480 at 60 Hz: 640 + 16 + 96 + 48, 480 + 10 + 2 + 33 (25 MHz: 59.5 Hz);
+// VESA 800 x 600 at 60 Hz: 800 + 40 + 128 + 88, 600 + 1 + 4 + 23 (40 MHz: 60.3 Hz).
+// The line counter steps at h = H_SYNC_ON; the sync is high for h in (H_SYNC_ON, H_SYNC_OFF], v in
+// (V_SYNC_ON, V_SYNC_OFF].
+wire m;                                    // clk_pix: 1 800 x 600
+kg_sync #(.W(1)) sync_mode (.clk(clk_pix), .d(vmode), .q(m));
+assign mode_o = m;
+wire [10:0] H_VIS = m ? 11'd800 : 11'd640;
+wire [10:0] H_SYNC_ON = m ? 11'd839 : 11'd655;
+wire [10:0] H_SYNC_OFF = m ? 11'd967 : 11'd751;
+wire [10:0] H_END = m ? 11'd1055 : 11'd799;
+wire [9:0] V_VIS = m ? 10'd600 : 10'd480;
+wire [9:0] V_SYNC_ON = m ? 10'd600 : 10'd489;
+wire [9:0] V_SYNC_OFF = m ? 10'd604 : 10'd491;
+wire [9:0] V_END = m ? 10'd627 : 10'd524;
 
-assign vid_len = 9'd400;
+assign vid_len = vmode ? 9'd400 : 9'd320;
 
 // ------------------------------------------------------------------ counters (clk_pix)
 
@@ -63,9 +82,9 @@ wire sel_p;
 kg_sync #(.W(1)) sync_sel (.clk(clk_pix), .d(fb_sel), .q(sel_p));
 reg shown_p = 1'b0;
 reg frame_p = 1'b0;
-wire [9:0] v_next = (v == V_END) ? 10'd0 : v + 10'd1;
+wire [9:0] v_next = (v >= V_END) ? 10'd0 : v + 10'd1;   // >=: a switch to the shorter mode
 always @(posedge clk_pix) begin
-	h <= (h == H_END) ? 11'd0 : h + 11'd1;
+	h <= (h >= H_END) ? 11'd0 : h + 11'd1;
 	if (h == H_SYNC_ON) v <= v_next;
 	// the buffer for the next frame, at the start of the vertical sync (before the fetch of line 0)
 	if (h == 11'd0 && v == V_SYNC_ON + 10'd1) begin

@@ -31,6 +31,7 @@
      3c R  WHEEL: bits 11..0 the wheel sum (signed, saturated; + = away from the user; reading clears)
      38 R  JOY: { joy_r, joy_l }
      40 R  US: microseconds since the CPU started
+     44 W/R  VMODE: bit 0 the video mode (menu_video): 0 640 x 480 (after the start), 1 800 x 600
      80..9c      SOUND: the two channels of menu_sound (+0 address, +4 length, +8 step, +c control /
                  R playing), channel 1 at 0x90
      a0 W  MIDI: a byte to the SAM2695 (menu_midi_mux, whole messages with their status); R bit 0
@@ -95,6 +96,7 @@ module menu_soc #(
 	input wire fb_shown,                  // the one shown (synchronised to clk)
 	input wire frame_t,                   // toggles at each frame (synchronised to clk)
 	output reg show = 1'b0,
+	output reg vmode = 1'b0,              // 0 640 x 480, 1 800 x 600 (kept over a LAUNCH: the firmware's messages)
 
 	// sound: the PCM mix (48 kHz, snd_t toggles with each value) and the MIDI bytes of the CPU
 	output wire signed [15:0] snd_out,
@@ -384,6 +386,7 @@ always @(posedge clk) begin
 				8'h10: show <= d_dat_o[0];
 				8'h18: grad_top <= d_dat_o[23:0];
 				8'h20: grad_bot <= d_dat_o[23:0];
+				8'h44: vmode <= d_dat_o[0];
 				8'h14: begin halted <= 1'b1; show <= 1'b0; launch_clr <= 1'b1; launch_wait <= 1'b1; end
 				default: ;
 			endcase
@@ -413,6 +416,7 @@ always @(posedge clk) begin
 					ms_dz <= ms_wr ? sat_add(12'sd0, ms_z) : 12'sd0;
 				end
 				8'h40: io_dat <= us;
+				8'h44: io_dat <= { 31'd0, vmode };
 				8'h8c: io_dat <= { 23'd0, snd_playing[0], 8'd0 };
 				8'h9c: io_dat <= { 23'd0, snd_playing[1], 8'd0 };
 				8'ha0: io_dat <= { 31'd0, midi_full };

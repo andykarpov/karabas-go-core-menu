@@ -2,7 +2,7 @@
 // arrays, composed as menu_compose does (the gradient, the alpha of the palette) and written as PPM,
 // for a quick look at the pictures (the approval frames of a UI step). The registers are an array,
 // RPC answers from a fake karabas.ini (the colours and values of the bench) and a fake core list.
-//   host/run.sh: build + run -> host/out/*.png
+//   host/run.sh: build + run in both video modes -> host/out/640/*.png, host/out/800/*.png
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,7 +67,7 @@ static const char *ini[][3] = {
   { "matrix", "enabled", "1" }, { "matrix", "brightness", "1" },
   { "autoload", "enabled", "0" }, { "autoload", "timeout", "10" }, { "autoload", "core", "pro" },
   { "ft812", "time", "1" }, { "ft812", "date", "1" }, { "ft812", "char", "1" }, { "ft812", "mouse_speed", "5" },
-  { "ft812", "sound", "1" }, { "ft812", "click", "1" },
+  { "ft812", "sound", "1" }, { "ft812", "click", "1" }, { "ft812", "video_mode", "0" },
   { "ft812", "color_bg", "000608" }, { "ft812", "color_gradient", "006a80" }, { "ft812", "color_button", "0e2228" },
   { "ft812", "color_active", "00a0b8" }, { "ft812", "color_text", "e0fcff" }, { "ft812", "color_text_active", "ffffff" },
   { "ft812", "color_copyright", "5a8088" },
@@ -153,18 +153,19 @@ int rpc_call(uint8_t svc, uint8_t fn, const void *in_, uint16_t in_len, void *ou
 }
 
 // ---- the picture as menu_compose makes it ----
+static const char *out_dir = "host/out/640";
 static void dump(const char *name) {
-  int b = regs[0x04 / 4] & 1;
+  int b = regs[0x04 / 4] & 1, g_lines = scr_h * 3 / 4;
   uint32_t top = regs[0x18 / 4], bot = regs[0x20 / 4];
   char path[256];
-  snprintf(path, sizeof(path), "host/out/%s.ppm", name);
+  snprintf(path, sizeof(path), "%s/%s.ppm", out_dir, name);
   FILE *o = fopen(path, "wb");
-  fprintf(o, "P6 800 600 255\n");
-  for (int y = 0; y < 600; y++) {
-    int t = y >= 450 ? 256 : y * 256 / 450;
-    for (int x = 0; x < 800; x++) {
-      uint32_t e = regs[(0x400 + 0x400 * b) / 4 + host_fb[b][y * 800 + x]];
-      if (host_fb[b][y * 800 + x] == 0) e = 0;
+  fprintf(o, "P6 %d %d 255\n", scr_w, scr_h);
+  for (int y = 0; y < scr_h; y++) {
+    int t = y >= g_lines ? 256 : y * 256 / g_lines;
+    for (int x = 0; x < scr_w; x++) {
+      uint32_t e = regs[(0x400 + 0x400 * b) / 4 + host_fb[b][y * FB_STRIDE + x]];
+      if (host_fb[b][y * FB_STRIDE + x] == 0) e = 0;
       int a = e >> 28;
       if (a == 15) a = 16;
       for (int s = 16; s >= 0; s -= 8) {
@@ -196,13 +197,19 @@ static void stuck(int sig) {   // a hang: where (addr2line on the addresses)
 }
 
 int main(int argc, char **argv) {
-  (void) argc; (void) argv;
+  // argv[1]: the video mode of the fake karabas.ini, 640 (default) or 800
+  if (argc > 1 && !strcmp(argv[1], "800")) {
+    out_dir = "host/out/800";
+    for (int i = 0; i < (int) (sizeof(ini) / sizeof(ini[0])); i++) if (!strcmp(ini[i][1], "video_mode")) ini[i][2] = "1";
+  }
   setvbuf(stdout, 0, _IONBF, 0);
   signal(SIGALRM, stuck);
   alarm(20);
   gfx_init();
   settings_read();
   cores_read();
+  video_set(set_val[S_VIDEO]);
+  printf("host: %d x %d\n", scr_w, scr_h);
   browser_start();
   msc_mode = 1; browser_msc_draw();              dump("00a_msc"); msc_mode = 0;
   browser_open();                                dump("00_browser");
@@ -212,7 +219,7 @@ int main(int argc, char **argv) {
     int b = regs[0x04 / 4] & 1, bad = 0;
     ptr.visible = 1; ptr.x = 700; ptr.y = 300; browser_mouse(M_MOVED);
     memcpy(snap, host_fb[b], sizeof(snap));
-    const int at[4][2] = { { 300, 88 + 40 + 10 }, { 36, 104 }, { 480, 560 }, { 320, 560 } };
+    const int at[4][2] = { { scr_w / 2, 88 + 40 + 10 }, { 36, 104 }, { scr_w / 2 + 80, scr_h - 40 }, { scr_w / 2 - 80, scr_h - 40 } };
     const char *names[4] = { "00d_hover_core", "00e_hover_setup", "00f_hover_next", "00g_hover_prev" };
     for (int i = 0; i < 4; i++) {
       ptr.x = at[i][0]; ptr.y = at[i][1]; browser_mouse(M_MOVED); dump(names[i]);
@@ -222,9 +229,11 @@ int main(int argc, char **argv) {
       if (d) { printf("host: %s left %d pixels changed\n", names[i], d); bad++; }
     }
     printf("host: hover traces: %s\n", bad ? "BAD" : "none");
-    ptr.x = 480; ptr.y = 560; browser_mouse(M_LEFT);  dump("00h_click_next");
+    ptr.x = scr_w / 2 + 80; ptr.y = scr_h - 40; browser_mouse(M_LEFT);  dump("00h_click_next");
     browser_mouse(M_LEFT);                            dump("00i_click_next_last");
-    ptr.x = 320; browser_mouse(M_LEFT);               dump("00j_click_prev");
+    ptr.x = scr_w / 2 - 80; browser_mouse(M_LEFT);
+    if (scr_h == 480) browser_mouse(M_LEFT);         // three pages: back to the first
+    dump("00j_click_prev");
     ptr.x = 700; ptr.y = 300; browser_mouse(M_MOVED); ptr.visible = 0; browser_mouse(M_MOVED);
   }
   keys("l");                                     dump("00b_setup_focus");   // Left on the first core
@@ -233,6 +242,9 @@ int main(int argc, char **argv) {
   keys("e");                                     dump("02_page_system");
   keys("xde");                                   dump("03_page_autoload");
   keys("xde");                                   dump("04_page_display");
+  // the video mode tried: the other mode and its dialog, then back (Esc) to the one of karabas.ini
+  keys("r");                                     dump("04a_mode_try");
+  keys("x");                                     dump("04b_mode_back");
   keys("xde");                                   dump("05_page_sound");
   keys("xde");                                   dump("06_page_theme");
   keys("de");                                    dump("07_color_editor");
@@ -246,7 +258,7 @@ int main(int argc, char **argv) {
   keys("le");                                    dump("15_back_dropped");
   // the mouse: a hover on Autoload, a hovered row
   keys("s");
-  ptr.visible = 1; ptr.x = 80; ptr.y = 88 + 40 + 10; setup_mouse(M_MOVED); dump("16_hover_tab");
+  ptr.visible = 1; ptr.x = 80; ptr.y = 88 + (scr_h == 480 ? 32 : 40) + 10; setup_mouse(M_MOVED); dump("16_hover_tab");
   keys("de"); ptr.x = 400; ptr.y = 128 + 36 + 10; setup_mouse(M_MOVED); dump("17_hover_row");
   // Wi-Fi: the status as soon as the section is chosen, the network list, a password
   keys("xxxs" "ddddd" "d");   run_ms(3000);      dump("19_wifi_status");

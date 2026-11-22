@@ -75,6 +75,21 @@ void look_apply(void) {
 
 // ---- the picture ----
 
+int scr_w = 640, scr_h = 480;    // the mode after the start (VMODE 0)
+
+void video_set(int mode) {
+  mode = mode ? 1 : 0;
+  if (mode == video_mode()) return;
+  pointer_hide();
+  R_VMODE = (uint32_t) mode;
+  scr_w = mode ? 800 : 640;
+  scr_h = mode ? 600 : 480;
+  if (ptr.x > scr_w - 1) ptr.x = scr_w - 1;
+  if (ptr.y > scr_h - 1) ptr.y = scr_h - 1;
+}
+
+int video_mode(void) { return scr_w == 800; }
+
 void scr_begin(void) {
   gfx_target(!(R_FB & 1));
   gfx_reset_palette();
@@ -196,7 +211,7 @@ static const char *const pointer_art[17] = {
   "X.....XXXXX     ", "X..X..X         ", "X.X X..X        ", "XX  X..X        ", "X    X..X       ",
   "     X..X       ", "      XX        ",
 };
-pointer_t ptr = { FB_W / 2, FB_H / 2, 0, 0 };
+pointer_t ptr = { 320, 240, 0, 0 };   // the middle of 640 x 480
 static int m_rx = 0, m_ry = 0;
 static uint8_t m_buttons = 0;
 static uint32_t m_idle = 0;

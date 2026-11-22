@@ -156,14 +156,14 @@ wire locked, areset;
 wire signed [15:0] snd_out;   // the PCM sounds of menu_soc (clk_cpu)
 wire snd_t;
 
-// VCO 50 * 18 / 2 = 450 MHz, phase 0: clk_sys 40.91 MHz (/11: the 800 x 600 video, HDMI, audio), clk_8 8.18 MHz
-// (/55: FT_CLK_OUT, the base of DCM_CLKGEN in hdmi_pll), clk_cpu 75 MHz (/6: the menu CPU, the SRAM, the MCU link,
-// the ESP and MIDI uarts). The PLL output of clk_sys has no BUFG in kg_pll: it drives the BUFG of clk_sys and the
-// BUFGMUX of hdmi_pll.
+// VCO 50 * 12 = 600 MHz, phase 0: clk_sys 40 MHz (/15: the audio, the ADC, the reset of HDMI; the pixel clock of
+// 800 x 600), clk_8 8 MHz (/75: FT_CLK_OUT), clk_cpu 75 MHz (/8: the menu CPU, the SRAM, the MCU link, the ESP and
+// MIDI uarts), 25 MHz (/24: the pixel clock of 640 x 480). The PLL outputs of 40 and 25 MHz have no BUFG in
+// kg_pll: 40 MHz drives the BUFG of clk_sys, both the BUFGMUX of the pixel clock clk_pix (below).
 wire [5:0] pll_clk;
 kg_pll #(
-    .DIVCLK_DIVIDE(2), .CLKFBOUT_MULT(18),
-    .CLKOUT0_DIVIDE(11), .CLKOUT1_DIVIDE(55), .CLKOUT2_DIVIDE(6),
+    .DIVCLK_DIVIDE(1), .CLKFBOUT_MULT(12),
+    .CLKOUT0_DIVIDE(15), .CLKOUT1_DIVIDE(75), .CLKOUT2_DIVIDE(8), .CLKOUT3_DIVIDE(24),
     .BUFG_MASK(6'b000110)
 ) pll (
     .clk_in              (CLK_50MHZ),
@@ -176,6 +176,16 @@ assign clk_8mhz = pll_clk[1];
 assign clk_cpu = pll_clk[2];
 BUFG bufg_clk_sys(.I(clk_sys_pll), .O(clk_sys));
 assign areset = ~locked;
+
+// the pixel clock: 25 MHz (640 x 480) or 40 MHz (800 x 600) by the VMODE register of the CPU (clk_cpu), through a
+// flip-flop of clk_sys. The BUFGMUX switches without a glitch (both inputs run); its select is a net of its own,
+// out of the timing analysis (ucf). hdmi_top resets its 5x DCM on a change.
+wire vmode;                       // menu_soc, clk_cpu
+wire vmode_sys;
+kg_sync #(.W(1)) sync_vmode (.clk(clk_sys), .d(vmode), .q(vmode_sys));
+(* KEEP = "TRUE" *) wire pix_sel = vmode_sys;
+wire clk_pix;
+BUFGMUX bufgmux_pix(.I0(pll_clk[3]), .I1(clk_sys_pll), .O(clk_pix), .S(pix_sel));
 
 // the reset of the clk_cpu side, synchronous to it
 reg [1:0] areset_cpu = 2'b11;
@@ -192,57 +202,39 @@ IBUFG ibufg_mcu_sck(.I(MCU_SCK), .O(mcu_sck_ibufg));
 BUFG bufg_mcu_sck(.I(mcu_sck_ibufg), .O(mcu_sck));
 
 // ft control signals / mcu only access
-// kg_mcu2 runs on clk_cpu: its FT video and DVI settings into clk_sys first (hdmi_top takes clk_sys registers)
-reg [1:0] ft_vga_s = 2'b00, dvi_only_s = 2'b00;
-always @(posedge clk_sys) begin
-    ft_vga_s <= { ft_vga_s[0], mcu_ft_vga_on };
-    dvi_only_s <= { dvi_only_s[0], dvi_only };
-end
-wire vdac2_sel = ft_vga_s[1];
+// kg_mcu2 runs on clk_cpu: its DVI setting into clk_sys first (hdmi_top takes clk_sys registers). The FT812 video
+// (FT_VGA_ON) is not used: the boot core shows its own menu only.
+reg [1:0] dvi_only_s = 2'b00;
+always @(posedge clk_sys) dvi_only_s <= { dvi_only_s[0], dvi_only };
 assign FT_SPI_CS_N = mcu_ft_spi_on ? mcu_ft_cs_n : 1'b1;
 assign FT_SPI_SCK = mcu_ft_spi_on ? mcu_sck_ibufg : 1'b1;
 // the SD2 pass-through takes the IBUFG output too (a BUFG does not drive a pad)
 assign SD_CLK = mcu_sck_ibufg;
 assign FT_SPI_MOSI = mcu_ft_spi_on ? mcu_ft_mosi : 1'b1;
 
-// FT_CLK: the pixel clock of the FT812 (its video is taken on its falling edge, hdmi_pll measures it). It was a
-// BUFGMUX with clk_sys, which hdmi_pll measured in the mode of the menu too.
-wire ft_clk_ibufg, ft_clk_int;
-IBUFG ibufg_ft_clk(.I(FT_CLK), .O(ft_clk_ibufg));
-BUFG bufg_ft_clk(.I(ft_clk_ibufg), .O(ft_clk_int));
-
 // the video of the menu: the bitmap OSD over the background (below)
 wire [7:0] osd_r, osd_g, osd_b;
 wire video_hs, video_vs, video_de;
 
-// hdmi
-hdmi_top #(.SAMPLERATE(48000)) hdmi_top(
-    .clk                (ft_clk_int),
+// hdmi: the syncs of 640 x 480 are negative (mode_pix 0), those of 800 x 600 positive
+wire mode_pix;                    // menu_video: vmode in clk_pix
+hdmi_top #(.SAMPLERATE(48000), .CLKRATE(40000000)) hdmi_top(
+    .clk_pix            (clk_pix),
     .clk_ref            (clk_sys),
-    .clk_ref_pll        (clk_sys_pll),
-    .clk_8              (clk_8mhz),
+    .mode               (vmode_sys),
     .reset              (areset),
 
     .vga_rgb            ({osd_r[7:0], osd_g[7:0], osd_b[7:0]}),
-    .vga_hs             (video_hs),
-    .vga_vs             (video_vs),
+    .vga_hs             (video_hs ^ ~mode_pix),
+    .vga_vs             (video_vs ^ ~mode_pix),
     .vga_de             (video_de),
-
-    .ft_rgb             ({VGA_R[7:0], VGA_G[7:0], VGA_B[7:0]}),
-    .ft_hs              (VGA_HS),
-    .ft_vs              (VGA_VS),
-    .ft_de              (FT_DE),
-
-    .ft_sel             (vdac2_sel),
 
     .audio_en           (~dvi_only_s[1]),
     .audio_l            (audio_mix_l),
     .audio_r            (audio_mix_r),
 
     .tmds_p             (TMDS_P),
-    .tmds_n             (TMDS_N),
-
-    .freq               ()
+    .tmds_n             (TMDS_N)
 );
 
 // ------- PCM1808 ADC ---------
@@ -425,7 +417,7 @@ menu_soc soc (
     .kbd(kbd), .kbd_wr(kbd_wr), .ms_x(ms_x), .ms_y(ms_y), .ms_z(ms_z), .ms_b(ms_b), .ms_wr(ms_wr), .joy_l(joy_l), .joy_r(joy_r),
     .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
     .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .fb_sel(fb_sel), .fb_shown(fb_shown),
-    .frame_t(frame_t), .show(fb_show), .grad_top(grad_top), .grad_bot(grad_bot),
+    .frame_t(frame_t), .show(fb_show), .vmode(vmode), .grad_top(grad_top), .grad_bot(grad_bot),
     .snd_out(snd_out), .snd_t(snd_t),
     .midi_data(cpu_midi_data), .midi_wr(cpu_midi_wr), .midi_full(cpu_midi_full),
     .esp_rx_data(esp_uart_rx_data), .esp_rx_valid(esp_uart_rx_wr && esp_own), .esp_rx_ack(cpu_esp_ack),
@@ -440,15 +432,15 @@ generate for (gi = 0; gi < 16; gi = gi + 1) begin : g_md
 end endgenerate
 
 //--------- video ---------
-// the frame buffer of the CPU (800 x 600, the timing of the old vga_sync), 4 clocks after its counters
+// the frame buffer of the CPU (640 x 480 or 800 x 600, VMODE), 4 clocks after its counters
 wire [27:0] fb_rgba;
 wire fb_on, vga_hs, vga_vs, vga_de;
 menu_video video (
     .clk_cpu(clk_cpu),
     .vid_req(vid_req), .vid_adr(vid_adr), .vid_len(vid_len), .vid_we(vid_we), .vid_wa(vid_wa), .vid_wd(vid_wd),
-    .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .show(fb_show), .fb_sel(fb_sel), .fb_shown(fb_shown),
+    .pal_we(pal_we), .pal_wa(pal_wa), .pal_wd(pal_wd), .show(fb_show), .vmode(vmode), .fb_sel(fb_sel), .fb_shown(fb_shown),
     .frame_t(frame_t),
-    .clk_pix(clk_sys), .rgba(fb_rgba), .show_o(fb_on), .hs(vga_hs), .vs(vga_vs), .de(vga_de)
+    .clk_pix(clk_pix), .rgba(fb_rgba), .show_o(fb_on), .mode_o(mode_pix), .hs(vga_hs), .vs(vga_vs), .de(vga_de)
 );
 
 //--------- background ---------
@@ -458,19 +450,19 @@ menu_video video (
 wire [23:0] bg_rgb;
 wire bg_hs, bg_vs, bg_de;
 menu_compose compose(
-    .clk(clk_sys), .rgba_i(fb_rgba), .show_i(fb_on), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
+    .clk(clk_pix), .mode(mode_pix), .rgba_i(fb_rgba), .show_i(fb_on), .hs_i(vga_hs), .vs_i(vga_vs), .de_i(vga_de),
     .glow_i(24'd0), .grad_top(grad_top), .grad_bot(grad_bot),
     .rgb_o(bg_rgb), .hs_o(bg_hs), .vs_o(bg_vs), .de_o(bg_de)
 );
 
 //--------- OSD --------------
-// the screen of the menu is the bitmap OSD over the background, scale 2 (512 x 256 of 800 x 600);
+// the screen of the menu is the bitmap OSD over the background, scale 2 (512 x 256 of 640 x 480 or 800 x 600);
 // HDMI takes the syncs as they come out of the overlay (2 clocks later)
 kg_l2_osd_overlay #(.SCALE(2)) overlay(
     .wclk(clk_cpu), .osd_wr(osd_wr), .osd_waddr(osd_waddr), .osd_wdata(osd_wdata), .osd_en(osd_en),
     .osd_fg(osd_fg), .osd_bg(osd_bg), .osd_alpha(osd_alpha), .osd_px(osd_px), .osd_py(osd_py),
     .osd_pw(osd_pw), .osd_ph(osd_ph), .osd_place(osd_place), .osd_zoom(osd_zoom),
-    .clk(clk_sys), .rgb_i(bg_rgb), .hs_i(bg_hs), .vs_i(bg_vs), .de_i(bg_de),
+    .clk(clk_pix), .rgb_i(bg_rgb), .hs_i(bg_hs), .vs_i(bg_vs), .de_i(bg_de),
     .rgb_o({ osd_r, osd_g, osd_b }), .hs_o(video_hs), .vs_o(video_vs), .de_o(video_de)
 );
 

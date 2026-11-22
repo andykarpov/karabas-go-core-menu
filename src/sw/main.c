@@ -21,6 +21,7 @@ int main(void) {
   while (!rpc_enabled() && R_MS - t0 < 2000) ;
   if (rpc_enabled()) { settings_read(); cores_read(); dbg_puts("menu: cores read\n"); }
   else dbg_puts("menu: no RPC\n");
+  video_set(set_val[S_VIDEO]);   // [ft812] video_mode (640 x 480 without it, the mode after the start)
   // the cards are USB drives of the PC: the msc screen of the FT812 menu, until the firmware reboots
   if (msc_mode) browser_msc();
   browser_start();

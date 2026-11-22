@@ -219,32 +219,46 @@ NET "FLASH_WP_N"    LOC="N12"  | IOSTANDARD = LVCMOS33; # CONF_IO2
 NET "FLASH_HOLD_N"  LOC="P12"  | IOSTANDARD = LVCMOS33; # CONF_IO3
 
 # Timing constraints. This block is the same in karabas_go.ucf, karabas_mini.ucf and karabas_minig.ucf; the parts
-# after it are those of the board (the video DAC of the Go, the FT812 and HDMI clocks of the Mini / Mini G).
+# after it are those of the board (the video DAC of the Go, HDMI of the Mini / Mini G).
 #
-# Clocks, all from one PLL on CLK_50MHZ (VCO 450 MHz), phase 0 (rtl/karabas_*_top.v):
-#   pll_clk<0> 40.91 MHz clk_sys: the 800 x 600 video (menu_video, the OSD overlay), the DAC
-#   pll_clk<1> 12.16 MHz          MIDI_CLK of the Go
-#   pll_clk<2> 75 MHz    clk_cpu: (the self-drawing menu, docs/PLAN.md) the menu CPU, the SRAM, the MCU link
-#                                 (kg_mcu2), the ESP and MIDI uarts
-# The PERIOD of CLK_50MHZ is derived onto every PLL output (and the HDMI DCMs). The ucf had PERIODs of 40 and 8 MHz
-# on clk_sys and clk_8 (they are 40.91 and 8.18), 30 MHz on MCU_SCK and a TIG on the measured FT frequency, a path
-# that is real. No clock comes from logic and there are no latches (the OSD had its counters, its pixel shifter and
-# its pixel load on the falling clk_sys).
+# Clocks, all from one PLL on CLK_50MHZ (VCO 600 MHz), phase 0 (rtl/karabas_*_top.v):
+#   pll_clk<0> 40 MHz    clk_sys (BUFG): the audio (ADC, DACs, the HDMI samples), the reset of HDMI; the pixel clock
+#                                 of 800 x 600 (BUFGMUX I1)
+#   pll_clk<1>           Mini / Mini G: 8 MHz clk_8, FT_CLK_OUT; Go: 12.24 MHz MIDI_CLK
+#   pll_clk<2> 75 MHz    clk_cpu: the menu CPU, the SRAM, the MCU link (kg_mcu2), the ESP and MIDI uarts
+#   pll_clk<3>           Go, Mini G: 25 MHz, the pixel clock of 640 x 480 (BUFGMUX I0); Mini: 12.24 MHz MIDI_CLK
+#   pll_clk<4>           Mini: 25 MHz, the pixel clock of 640 x 480
+#   clk_pix              the BUFGMUX of 25 / 40 MHz (the VMODE register of the CPU): menu_video (its scanout),
+#                        menu_compose, the OSD overlay, the VGA pins of the Go, HDMI of the Mini / Mini G
+# The PERIOD of CLK_50MHZ is derived onto every PLL output (and the HDMI DCM). No clock comes from logic and there are
+# no latches.
 # ------------------------------------------------------------------------------------------------------------
 NET "CLK_50MHZ" TNM_NET = "CLK_50MHZ";
 TIMESPEC "TS_CLK_50MHZ" = PERIOD "CLK_50MHZ" 20 ns HIGH 50%;
 
-# on the BUFG of clk_sys: the PLL output also drives the BUFGMUX of the HDMI pixel clock (Mini, Mini G)
 NET "clk_sys" TNM_NET = "TG_CLK_SYS";
 NET "pll_clk<2>" TNM_NET = "TG_CLK_CPU";
-# clk_sys (450 / 11) and clk_cpu (450 / 6) come from one VCO but have no common period short enough for the
-# analysis (their nearest edges are one VCO period apart). The paths between them are crossings only: kg_sync
-# toggles (the line requests of menu_video, the shown buffer, the frame), the line buffer and the palette (block
-# RAM, written on clk_cpu, read on clk_pix), the line number taken with its toggle (stable two clocks before it is
-# used), the settings of the OSD overlay (taken at the start of a frame) and of hdmi_top (two clk_sys flip-flops in
-# the top): their data paths are bounded by one clk_cpu period.
+NET "clk_pix" TNM_NET = "TG_CLK_PIX";
+# The pixel clock carries the derived PERIODs of both PLL outputs of the BUFGMUX, and only one of them runs at a
+# time: its paths are bounded by the shorter period (40 MHz), which covers 25 MHz too; no path is timed from one
+# of them to the other (a switch breaks a frame, the monitor syncs again).
+TIMESPEC "TS_PIX" = FROM "TG_CLK_PIX" TO "TG_CLK_PIX" 25 ns;
+# The select of the BUFGMUX (a clk_sys flip-flop of the VMODE register): a BUFGMUX switches without a glitch at any
+# time of S; its setup to the input clocks only decides at which of their edges.
+NET "pix_sel" TIG;
+# clk_cpu (600 / 8), clk_sys (600 / 15) and the pixel clock (600 / 15 or 600 / 24) come from one VCO but have no
+# common period short enough for the analysis (their nearest edges are one VCO period apart). The paths between them
+# are crossings only: kg_sync toggles (the line requests of menu_video, the shown buffer, the frame, VMODE), the line
+# buffer and the palette (block RAM, written on clk_cpu, read on clk_pix), the line number taken with its toggle
+# (stable two clocks before it is used), the settings of the OSD overlay (taken at the start of a frame), the
+# colours of menu_compose (stable while used), the audio samples and the reset into HDMI (toggles, two
+# flip-flops): their data paths are bounded by one clk_cpu period, those from clk_sys by one pixel clock period.
 TIMESPEC "TS_CPU_TO_SYS" = FROM "TG_CLK_CPU" TO "TG_CLK_SYS" 13.3 ns DATAPATHONLY;
 TIMESPEC "TS_SYS_TO_CPU" = FROM "TG_CLK_SYS" TO "TG_CLK_CPU" 13.3 ns DATAPATHONLY;
+TIMESPEC "TS_CPU_TO_PIX" = FROM "TG_CLK_CPU" TO "TG_CLK_PIX" 13.3 ns DATAPATHONLY;
+TIMESPEC "TS_PIX_TO_CPU" = FROM "TG_CLK_PIX" TO "TG_CLK_CPU" 13.3 ns DATAPATHONLY;
+TIMESPEC "TS_SYS_TO_PIX" = FROM "TG_CLK_SYS" TO "TG_CLK_PIX" 25 ns DATAPATHONLY;
+TIMESPEC "TS_PIX_TO_SYS" = FROM "TG_CLK_PIX" TO "TG_CLK_SYS" 25 ns DATAPATHONLY;
 
 # The SRAM (menu_sram, 10 ns): MA / MWR_N / MRD_N / MD out of IOB flip-flops on clk_cpu, MD into an IOB flip-flop
 # at the end of a two-clock read (26.7 ns: the 8 ns out, 10 ns of the SRAM, 4 ns in), as doom_sram.
@@ -267,10 +281,11 @@ TIMESPEC "TS_MCU_TO_CPU" = FROM "TG_CLK_MCU" TO "TG_CLK_CPU" 31.25 ns DATAPATHON
 TIMESPEC "TS_CPU_TO_MCU" = FROM "TG_CLK_CPU" TO "TG_CLK_MCU" 31.25 ns DATAPATHONLY;
 
 # ---- Go: the video DAC ------------------------------------------------------------------------------------------
-# V_CLK is the inverted clk_sys (through a LUT, as it was clk_sys): the DAC takes the pixels at the falling
-# clk_sys, half a period after the OSD changed them. The clock to the pad is not timed (it was not before either);
-# the pixels and syncs are bounded by half a period from their flip-flops to the pads.
+# V_CLK is the inverted clk_pix (through a LUT, with FT_CLK of the FT mode): the DAC takes the pixels at the falling
+# clk_pix, half a period after the OSD changed them (20 ns in 640 x 480, 12.5 ns in 800 x 600). The clock to the pad
+# is not timed (it was not before either); the pixels and syncs are bounded by half a period of 40 MHz from their
+# flip-flops to the pads.
 TIMEGRP "TG_VGA_OUT" = PADS("VGA_R<*>") PADS("VGA_G<*>") PADS("VGA_B<*>") PADS("VGA_HS") PADS("VGA_VS");
 TIMESPEC "TS_VGA_OUT" = FROM FFS TO "TG_VGA_OUT" 12 ns DATAPATHONLY;
-# clk_sys drives the LUT of V_CLK (with FT_CLK of the FT mode)
-PIN "bufg_clk_sys.O" CLOCK_DEDICATED_ROUTE = FALSE;
+# clk_pix drives the LUT of V_CLK (with FT_CLK of the FT mode)
+PIN "bufgmux_pix.O" CLOCK_DEDICATED_ROUTE = FALSE;

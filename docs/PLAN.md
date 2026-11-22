@@ -175,7 +175,27 @@ works. To decide:
   Forget. The HELLO of the core lists SYS, CFG, CORES, HID (RPC_SERVICES 16'h000F) since the Ф4 builds
   (the firmware grants HID to a menu core anyway).
 
+## Video modes (user, 2026-11-22)
+
+Users reported that the new menu is not shown, or shown broken, by some monitors (a photo of a scaler:
+the upper half of the picture right, the lower half torn). The menu ran 800 x 600 with the VESA lines
+(1056 x 628) at the 40.91 MHz of VCO 450 / 11: 61.7 Hz, 38.7 kHz, a mode no table has, over HDMI not a
+CEA mode at all; the FT812 menu before it ran 640 x 480 by default (mode 0 of the firmware until
+2026-10-28), so most users had that.
+
+- Two VESA modes, as the FT812 menu of the firmware had: 640 x 480 at 25 MHz (800 x 525, 59.5 Hz,
+  syncs negative) and 800 x 600 at 40 MHz (1056 x 628, 60.3 Hz, positive). `[ft812] video_mode` of
+  karabas.ini as before (0 / 1; another number of the older firmware is 640 x 480); the default is
+  640 x 480, also the mode after the start. Setup > Display > Video mode switches at once with a
+  Keep / Back dialog that goes back after 15 s.
+- The PLL on VCO 600 MHz: 40.000 (clk_sys), 25.000, 75 (the CPU), 8.000 (FT_CLK_OUT), 12.24 (MIDI_CLK).
+  The pixel clock is a BUFGMUX of 25 and 40 MHz; the audio stays on clk_sys.
+- The FT812 video over HDMI of the Mini / Mini G is gone (user): the BUFGMUX had no input left for it
+  (a cascade of two BUFGMUX is not a dedicated route on Spartan-6), and the firmware does not start it
+  for the boot core since Ф4. The Go keeps its FT812 path (V_CLK mux, free).
+- The screens are laid out for the mode as the FT812 menu was (`ft_width()` / `ft_height()` of the
+  firmware): 8 cores a page in 640 x 480, the Setup tabs 32 px apart, the panel 432 px wide.
+
 ## Open items
 
-- The menu resolution: 800 x 600 now; the FT modes of `ft_height()` go away.
 - FS sandbox for other cores: a `core.json` key with the allowed roots (tools `make_core`).
