@@ -122,6 +122,17 @@ void draw_clock(void) {
   if (rpc_call(RPC_SYS, 1, 0, 0, t, sizeof(t), &n, 500) != RPC_OK || n < 8) return;
   char s[12], *p;
   ramp_t r = gfx_ramp_alpha(look.text);
+  if (gfx_target_buffer() == (int) (R_FB & 1)) {
+    // the shown buffer (the tick of every second): the place is cleared and drawn again while the
+    // beam is below it, else a frame shows it empty or half drawn. FRAMES counts the starts of the
+    // vertical sync; 4..5 ms after it (R_MS steps by 1 ms) the beam is at line 90 or lower (125 lines
+    // of 32 us in 640 x 480, 151 of 26.4 us in 800 x 600), the clock ends at line 84, the next frame
+    // is 11 ms away.
+    uint32_t f = R_FRAMES, t0 = R_MS;
+    while (R_FRAMES == f && R_MS - t0 < 40) ;
+    t0 = R_MS;
+    while (R_MS - t0 < 5) ;
+  }
   gfx_clear(FB_W - 176, 8, 170, 76);
   if (look.time) {
     p = u2s(s, t[4], 2); *p++ = ':'; p = u2s(p, t[5], 2); *p++ = ':'; u2s(p, t[6], 2);
