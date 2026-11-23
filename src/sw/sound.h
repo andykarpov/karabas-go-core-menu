@@ -1,12 +1,9 @@
-// The sounds of the menu: PCM of menu_sound (2 channels of raw s16le in the SRAM) and MIDI notes on
-// the SAM2695 (menu_midi_mux).
+// The sounds of the menu: MIDI on the SAM2695 (menu_midi_mux): the key click and the start melody.
 #pragma once
 #include <stdint.h>
-#include "sounds_gen.h"
 
-void snd_play(int ch, const sound_t *s, uint8_t volume);
-void snd_start(int n);           // the start sound n (1..4) of [ft812] sound on channel 0; 0 stops it
-int snd_playing(int ch);
-void snd_stop(int ch);
 void midi_send(const uint8_t *msg, int len);   // a whole message with its status byte
 void midi_click(void);                         // the key click: GM percussion Cowbell (as the FT812 menu)
+void melody_start(void);                       // the start melody ([ft812] sound), from its beginning
+int melody_poll(void);                         // its next notes when they are due; 1 while it plays
+void melody_stop(void);                        // all its notes off at once

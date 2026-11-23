@@ -45,4 +45,5 @@ void gfx_text_right(const font_t *f, int rx, int cy, const char *s, ramp_t ramp)
 void gfx_pill(int x0, int x1, int cy, int r, ramp_t ramp);  // a bar with round ends from x0 to x1 (centres)
 void gfx_solid_rect(int x, int y, int w, int h, uint8_t idx);  // one entry, the corner pixels cut
 void gfx_coverage(int x, int y, int w, int h, const uint8_t *cov4, ramp_t ramp);  // 4-bit coverage, 2 px a byte
+void gfx_coverage_rle(int x, int y, int w, const uint8_t *rle, int n, ramp_t ramp);  // runs: (len - 1) << 4 | coverage
 void gfx_indexed(int x, int y, int w, int h, int scale, const uint8_t *px, const uint8_t *map); // 0 = transparent

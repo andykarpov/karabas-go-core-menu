@@ -8,7 +8,7 @@ board of SYS INFO) and the character (BG_ID 2, 160 x 200).
   mkimages.py BITMAPS_H OUT.h [--png DIR]
 
 The logos go out as colour indexes into one small palette (LOGO_PAL, black = transparent); the
-character as 4-bit coverage of white (its pixels are grey levels over black)."""
+character as 4-bit coverage of white (its pixels are grey levels over black) in runs (char_rle)."""
 import io, re, sys
 from PIL import Image
 
@@ -60,11 +60,21 @@ for name, idx in (("logo_go_px", idx_go), ("logo_mini_px", idx_mini)):
     for i in range(0, len(idx), 56):
         out.append("  " + ",".join(str(v) for v in idx[i:i + 56]) + ",")
     out.append("};")
+# the character in runs along the rows (row after row): a byte = (run length - 1) << 4 | coverage, a
+# run of 1..16 pixels (71 % of them are 0: 16000 bytes packed two pixels a byte go to ~5 KB)
+rle, i = [], 0
+while i < len(cov):
+    j = i
+    while j < len(cov) and cov[j] == cov[i] and j - i < 16:
+        j += 1
+    rle.append(((j - i - 1) << 4) | cov[i])
+    i = j
+back = [b & 15 for b in rle for _ in range((b >> 4) + 1)]
+assert back == cov
 out += ["", "#define CHAR_W 160", "#define CHAR_H 200",
-        "static const uint8_t char_cov[CHAR_W * CHAR_H / 2] = {  // two pixels a byte, the left one low"]
-packed = [cov[i] | (cov[i + 1] << 4) for i in range(0, len(cov), 2)]
-for i in range(0, len(packed), 40):
-    out.append("  " + ",".join(f"0x{v:02x}" for v in packed[i:i + 40]) + ",")
+        f"static const uint8_t char_rle[{len(rle)}] = {{  // (run - 1) << 4 | coverage, row after row"]
+for i in range(0, len(rle), 40):
+    out.append("  " + ",".join(f"0x{v:02x}" for v in rle[i:i + 40]) + ",")
 out.append("};")
 open(outp, "w").write("\n".join(out) + "\n")
 print(f"logo {len(pal)} colours, char {sum(1 for c in cov if c)} pixels", file=sys.stderr)

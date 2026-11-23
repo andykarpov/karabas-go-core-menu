@@ -145,7 +145,7 @@ void draw_clock(void) {
 }
 
 void draw_character(void) {
-  if (look.chr) gfx_coverage(FB_W - CHAR_W - 8, FB_H - CHAR_H - 8, CHAR_W, CHAR_H, char_cov, gfx_ramp_alpha(0xffffff));
+  if (look.chr) gfx_coverage_rle(FB_W - CHAR_W - 8, FB_H - CHAR_H - 8, CHAR_W, char_rle, (int) sizeof(char_rle), gfx_ramp_alpha(0xffffff));
 }
 
 // ---- keys ----

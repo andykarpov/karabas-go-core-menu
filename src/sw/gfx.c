@@ -150,11 +150,13 @@ static uint32_t utf8_next(const char **s) {
 }
 
 static const font_glyph_t *glyph(const font_t *f, uint32_t cp) {
-  int lo = 0, hi = f->n - 1;
-  while (lo <= hi) {
-    int m = (lo + hi) / 2;
-    if (f->g[m].cp == cp) return &f->g[m];
-    if (f->g[m].cp < cp) lo = m + 1; else hi = m - 1;
+  for (int i = 0; i < f->nr; i++) {
+    const font_range_t *r = &f->r[i];
+    if (cp >= r->first && cp - r->first < r->n) {
+      const font_glyph_t *g = &f->g[r->g + cp - r->first];
+      if (!g->none) return g;
+      break;
+    }
   }
   return cp != '?' ? glyph(f, '?') : 0;
 }
@@ -172,6 +174,17 @@ void gfx_coverage(int x, int y, int w, int h, const uint8_t *cov4, ramp_t ramp) 
     for (int i = 0; i < w; i++) {
       int c = (row[i >> 1] >> ((i & 1) * 4)) & 15;
       if (c) pset(x + i, y + j, (uint8_t) (ramp + c - 1));
+    }
+  }
+}
+
+void gfx_coverage_rle(int x, int y, int w, const uint8_t *rle, int n, ramp_t ramp) {
+  int i = 0, j = 0;
+  for (int k = 0; k < n; k++) {
+    int c = rle[k] & 15, run = (rle[k] >> 4) + 1;
+    for (; run > 0; run--) {
+      if (c) pset(x + i, y + j, (uint8_t) (ramp + c - 1));
+      if (++i == w) { i = 0; j++; }
     }
   }
 }

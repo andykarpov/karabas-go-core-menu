@@ -90,8 +90,8 @@ Goal: the board starts the menu without the SD1 card (no card, a broken card, a 
 boot.kg). The menu then shows "No cores on the SD card" and Setup (Wi-Fi, the clock, the pads) still
 works. To decide:
 
-- Size. boot.kg of the Mini G today: bitstream 737 KB + menu.bin 216 KB + sounds.bin 319 KB =
-  ~1.27 MB; the firmware ~0.5 MB. The firmware is built for PICO_BOARD pico (2 MB of flash): 1.8 MB
+- Size. boot.kg of the Mini G (2026-11-21): bitstream 737 KB + menu.bin 216 KB + sounds.bin 319 KB =
+  ~1.27 MB (since 2026-11-23 no sounds.bin and menu.bin ~117 KB: ~0.85 MB); the firmware ~0.5 MB. The firmware is built for PICO_BOARD pico (2 MB of flash): 1.8 MB
   of 2 is tight. Check the flash chip of each board (Go / Mini / Mini G, maybe 16 MB). If it is 2 MB:
   keep the sounds out of the flash copy (the menu runs without them), compress the bitstream
   (Spartan-6 bitstreams pack well, about 2-3x), or both.
@@ -195,6 +195,22 @@ CEA mode at all; the FT812 menu before it ran 640 x 480 by default (mode 0 of th
   for the boot core since Ф4. The Go keeps its FT812 path (V_CLK mux, free).
 - The screens are laid out for the mode as the FT812 menu was (`ft_width()` / `ft_height()` of the
   firmware): 8 cores a page in 640 x 480, the Setup tabs 32 px apart, the panel 432 px wide.
+
+## Smaller ROMs (user, 2026-11-23)
+
+The firmware loaded 530 KB of ROMs after the bitstream (menu.bin 218 KB, sounds.bin 312 KB).
+
+- No PCM sounds: roms/sounds.bin, sounds_gen.h and mksounds.py are gone, the program plays none
+  (menu_sound.v stays in the bitstreams until the next ISE build, silent). The start sound is a MIDI
+  melody in menu.bin ("ta-dan": C5 E5 G5 of 120 ms, the chord C6 G5 E5 for 500 ms, GM Vibraphone on
+  channel 16, its program back to 0 at the end; chosen from six by the user); Setup > Sound > Start
+  sound is On / Off (`[ft812] sound` 1 / 0, the old 2..4 read as On). The key click stays (Cowbell).
+- Fonts: one font for all the text (f27, Noto Sans 16 px, ASCII + Cyrillic; the user chose it over
+  f28 everywhere, where the footers and hints did not fit); f30 (the clock) has only 32..64 (digits
+  and signs); f20 (the small Gamepad labels) ASCII only; f26, f28, f29 are gone.
+  A glyph is 8 bytes, found by code ranges (no code point in it).
+- The character picture is in runs (char_rle, 16000 -> 5129 bytes).
+- The firmware shows no ROM loading screen for the boot core (karabas-go-firmware #171).
 
 ## Open items
 
