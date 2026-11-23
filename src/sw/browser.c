@@ -16,6 +16,7 @@ int autoload_s = 0;
 int cores_busy = 0;   // CORES answered busy: the cards are USB drives of the PC (MSC)
 int msc_mode = 0;     // SYS INFO: the USB drive mode, 0 none, 1 the SD card, 2 the second one, 3 it is not found
 char fw_build[9] = "";
+int hw_id = 0;       // SYS INFO: the board (1 Go, 2 Mini, 3 Mini G)
 static int vis[MAX_CORES], nvis = 0;   // the visible cores: the list
 
 static uint8_t buf[RPC_MAX];
@@ -57,9 +58,10 @@ void cores_read(void) {
     const uint8_t *p = buf + 1;
     copy_str(autoload_file, 33, &p, buf + n);
   }
-  if (rpc_call(RPC_SYS, 0, 0, 0, buf, sizeof(buf), &n, 1000) == RPC_OK && n >= 8) {
+  if (rpc_call(RPC_SYS, 0, 0, 0, buf, sizeof(buf), &n, 1000) == RPC_OK && n >= 9) {
     for (int i = 0; i < 8; i++) fw_build[i] = (char) buf[i];
     fw_build[8] = 0;
+    hw_id = buf[8];
     if (n >= 13) msc_mode = buf[12];
   }
 }
