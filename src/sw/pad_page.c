@@ -156,7 +156,7 @@ static uint32_t label_color(int i) {
 
 static void draw_round(int x, int y, int r, int i) {
   gfx_circle(x, y, K(r), gfx_ramp_over(key_color(i), PAD_BODY));
-  gfx_text_center(r > 14 ? &f26 : &f20, x, y, btn_names[i], gfx_ramp_over(label_color(i), key_color(i)));
+  gfx_text_center(r > 14 ? &f27 : &f20, x, y, btn_names[i], gfx_ramp_over(label_color(i), key_color(i)));
 }
 static void draw_small(int x, int y, int i, const char *label) {
   gfx_round_rect(x, y, K(60), K(18), 6, gfx_ramp_over(key_color(i), PAD_BODY));
@@ -208,17 +208,17 @@ static void draw_list(void) {
     int32_t surf = pfocused ? row_back(px, ry, pw, ROW_H - 2, i == port, hovered) : GFX_ALPHA;
     char b[32];
     snprintf(b, sizeof(b), "%d", i + 1);
-    gfx_text_left(&f28, x + 8, cy, b, gfx_ramp(look.text, surf));
-    if (p->source == USB_PAD_NONE && p->vid == 0) { gfx_text_left(&f28, x + COL_PAD, cy, "-", gfx_ramp(look.copyright, surf)); continue; }
+    gfx_text_left(&f27, x + 8, cy, b, gfx_ramp(look.text, surf));
+    if (p->source == USB_PAD_NONE && p->vid == 0) { gfx_text_left(&f27, x + COL_PAD, cy, "-", gfx_ramp(look.copyright, surf)); continue; }
     snprintf(b, sizeof(b), "%04x:%04x", p->vid, p->pid);
-    gfx_text_left(&f28, x + COL_PAD, cy, b, gfx_ramp(look.text, surf));
-    gfx_text_left(&f28, x + COL_SRC, cy, pad_source(p), gfx_ramp(p->source == USB_PAD_DRIVER ? look.text : look.copyright, surf));
+    gfx_text_left(&f27, x + COL_PAD, cy, b, gfx_ramp(look.text, surf));
+    gfx_text_left(&f27, x + COL_SRC, cy, pad_source(p), gfx_ramp(p->source == USB_PAD_DRIVER ? look.text : look.copyright, surf));
   }
   int by = y + ROW_H * 3 + 12;
   page_button(x, by, LIST_BTN_W, "Assign", list_btn == 0, pfocused, HIT_MAP);
   page_button(x + LIST_BTN_W + 12, by, LIST_BTN_W, "Test", list_btn == 1, pfocused, HIT_TEST);
   if (can_forget()) page_button(x + 2 * (LIST_BTN_W + 12), by, LIST_BTN_W, "Forget", list_btn == 2, pfocused, HIT_FORGET);
-  if (list_msg && pfocused) gfx_text_left(&f28, x, by + TAB_H + 20, list_msg, gfx_ramp_alpha(list_msg_ok ? OK_COLOR : ERROR_COLOR));
+  if (list_msg && pfocused) gfx_text_left(&f27, x, by + TAB_H + 20, list_msg, gfx_ramp_alpha(list_msg_ok ? OK_COLOR : ERROR_COLOR));
 }
 
 static void draw_mapper(void) {
@@ -240,7 +240,7 @@ static void draw_mapper(void) {
     case PL_SAVED: strcpy(l1, "Saved"); c1 = OK_COLOR; strcpy(l2, pl.saved); break;
     case PL_FAILED: strcpy(l1, "Not saved"); c1 = ERROR_COLOR; strcpy(l2, "Could not write the SD card"); break;
   }
-  gfx_text_left(&f28, x, py + TAB_H / 2, l1, gfx_ramp_alpha(c1));
+  gfx_text_left(&f27, x, py + TAB_H / 2, l1, gfx_ramp_alpha(c1));
   gfx_text_left(&f27, x, py + TAB_H + 12, l2, gfx_ramp_alpha(look.copyright));
   int bx = px + pw - 16 - BTN_W, bx2 = bx - BTN_W - 8;
   if (pl.state == PL_PRESS) {

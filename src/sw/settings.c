@@ -9,7 +9,6 @@ static const char *const core_sort_keys[] = { "name", "file", "order" };
 // [ft812] video_mode: the modes of the FT812 menu of the firmware had these numbers; another number (the older
 // firmware had 15 modes) is 640 x 480, as the firmware took it
 static const char *const video_names[] = { "640x480", "800x600" };
-static const char *const sounds_names[] = { "Off", "Klyuchik", "Ta-dan", "Run", "Sound 4" };
 // the options of the matrix (firmware lib/common/matrix_style.c): karabas.ini has the names
 static const char *const mx_colors[] = { "Green", "Yellow", "Red" };
 static const char *const mx_seconds[] = { "Dot", "Colon", "Bar", "Off" };
@@ -45,7 +44,7 @@ const setting_t settings[S_COUNT] = {
   B("Show date",      "The date under the clock",       "ft812", "date", 1),
   B("Character",      "The Karabas picture",            "ft812", "char", 1),
   N("Mouse speed",    "How fast the pointer moves",     "ft812", "mouse_speed", 5, 1, 2),   // def: the index (speed 3)
-  C("Start sound",    "Played when a core starts",      "ft812", "sound", sounds_names, 0, 1),
+  B("Start sound",    "A melody when a core starts",    "ft812", "sound", 1),
   B("Key click",      "A click on every key",           "ft812", "click", 1),
   { "Theme",          "The colors of the menu",         0, 0, SK_CHOICE, 0, 0, 0, 0, 0 },
   K("Background",     "Behind everything",              "color_bg", 0x010101),
@@ -182,11 +181,11 @@ void settings_read(void) {
     else if (s->kind == SK_BOOL) {
       if (str_ieq(v, "1") || str_ieq(v, "true") || str_ieq(v, "yes")) set_val[id] = 1;
       else if (str_ieq(v, "0") || str_ieq(v, "false") || str_ieq(v, "no")) set_val[id] = 0;
+      else if (parse_uint(v, &n)) set_val[id] = n != 0;   // [ft812] sound 2..4: the PCM sounds of before
     } else if (s->kind == SK_COLOR) { if (parse_hex(v, &c)) set_val[id] = (int32_t) (c & 0xFFFFFF); }
     else if (s->kind == SK_CHOICE && s->ini_names) { for (int i = 0; i < s->n; i++) if (str_ieq(v, s->names[i])) set_val[id] = i; }
     else if (s->kind == SK_CHOICE && parse_uint(v, &n) && n >= s->base && n - s->base < s->n) set_val[id] = n - s->base;
   }
-  if (set_val[S_SOUND] >= 5) set_val[S_SOUND] = 1;
   for (int id = 0; id < S_COUNT; id++) saved[id] = set_val[id];
   str_cpy(saved_core, set_core);
   core_find();

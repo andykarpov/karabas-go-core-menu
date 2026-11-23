@@ -20,9 +20,9 @@ TB_WHEEL=1 TB_FRAME=frame_wheel.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.b
 # the last core ([autoload] last_core=c.kg, no autoload): the list starts on c.kg, Down, Enter start d.kg
 echo "tb_menu_soc: the last core run"
 TB_LOOK=last_core=c.kg TB_FRAME=frame_last.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|launch|last core"
-# the start sound of [ft812] sound after Enter: PCM out of menu_sound
+# the start melody of [ft812] sound after Enter: MIDI to the SAM2695, no PCM
 echo "tb_menu_soc: the sound run"
-TB_SOUND=1 TB_FRAME=frame_sound.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|sound"
+TB_SOUND=1 TB_FRAME=frame_sound.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|melody"
 # Setup: S, a frame of it (the other buffer, its own palette), Esc back to the list, Down, Enter
 echo "tb_menu_soc: the Setup run"
 TB_SETUP=1 TB_FRAME=frame_setup_list.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc"

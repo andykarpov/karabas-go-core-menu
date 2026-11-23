@@ -24,9 +24,13 @@ static std::vector<uint32_t> frame(640 * 480);
 static int cap_state = 0; // 0 wait, 1 waiting for vs, 2 capturing, 3 done
 static int px = 0, py = 0, de_p = 0, vs_p = 0;
 static std::vector<uint8_t> midi_bytes;
+// the start melody of sound.c begins: Vibraphone (program 11) on channel 16, then C5 on
+static bool melody_heard() {
+  static const uint8_t m[5] = { 0xCF, 11, 0x9F, 72, 100 };
+  return std::search(midi_bytes.begin(), midi_bytes.end(), m, m + 5) != midi_bytes.end();
+}
 static int snd_t_p = 0, snd_peak = 0;
 static long snd_values = 0;
-static std::vector<int16_t> snd_wave;   // the PCM out at 48 kHz
 
 static void on_pix_edge() {
   int de = t->de, vs = t->vs;
@@ -54,7 +58,6 @@ static void step() {
   if (n == nc && t->clk_cpu && t->snd_t != snd_t_p) {
     snd_t_p = t->snd_t;
     int v = (int16_t) t->snd_out;
-    snd_wave.push_back((int16_t) v);
     if (v < 0) v = -v;
     if (v > snd_peak) snd_peak = v;
     snd_values++;
@@ -255,21 +258,6 @@ int main(int argc, char **argv) {
     t->ld_wr = 0;
     cpu_clocks(24);
   }
-  // the sounds (roms/sounds.bin of boot.kg) at 0x200000
-  {
-    FILE *fs = fopen("../../roms/sounds.bin", "rb");
-    std::vector<uint8_t> snd;
-    while (fs && (c = fgetc(fs)) != EOF) snd.push_back((uint8_t) c);
-    if (fs) fclose(fs);
-    for (size_t i = 0; i < snd.size(); i++) {
-      if (i % 512 == 0) while (!t->ld_ready) cpu_clock();
-      t->ld_addr = 0x200000 + (uint32_t) i; t->ld_data = snd[i]; t->ld_wr = 1;
-      cpu_clock();
-      t->ld_wr = 0;
-      cpu_clocks(8);   // faster than the firmware (25), still slower than a write of the SRAM (~6)
-    }
-    printf("tb_menu_soc: %zu bytes of sounds loaded\n", snd.size());
-  }
   t->ld_active = 0; t->ld_end = 1; cpu_clock(); t->ld_end = 0;
   printf("tb_menu_soc: %zu bytes loaded\n", prog.size());
 
@@ -337,8 +325,8 @@ int main(int argc, char **argv) {
     else if (phase == 2 && n - t_phase > 600000) { t->kbd = 0; phase = 3; t_phase = n; cap_state = 1; }
     else if (phase == 3 && cap_state == 3 && n - t_phase > 600000) { t->kbd = (uint64_t) 0x28 << 8; phase = 4; t_phase = n; } // Enter
     else if (phase == 4 && !launched.empty()) phase = 5;
-    // TB_SOUND: the start sound after Enter, 20 ms of it are enough
-    else if (phase == 4 && getenv("TB_SOUND") && snd_peak > 1000 && n - t_phase > 1500000) phase = 5;
+    // TB_SOUND: the start melody after Enter, its first note is enough (the whole of it is 0.9 s)
+    else if (phase == 4 && getenv("TB_SOUND") && melody_heard()) phase = 5;
   }
   t->kbd = 0;
   printf("tb_menu_soc: %d requests served, %llu clocks\n", served, (unsigned long long) n);
@@ -395,33 +383,10 @@ int main(int argc, char **argv) {
     if (!ok) { printf("tb_menu_soc: no click on MIDI\n"); errors++; }
   }
   if (getenv("TB_SOUND")) {
-    printf("tb_menu_soc: sound peak %d, %ld values\n", snd_peak, snd_values);
-    if (snd_peak < 1000) { printf("tb_menu_soc: no start sound\n"); errors++; }
-    // the start: the samples of sound 1 (22050 Hz) at 48 kHz, nearest, x 255 / 256: compare the
-    // output from its first value of the sound against roms/sounds.bin
-    FILE *fs = fopen("../../roms/sounds.bin", "rb");
-    std::vector<int16_t> src(20000);
-    size_t got = fs ? fread(src.data(), 2, src.size(), fs) : 0;
-    if (fs) fclose(fs);
-    // aligned at the first value that is not 0 (the sound starts with silence), the output value k
-    // holds the source sample floor(k * 22050 / 48000): the mean difference must be small
-    size_t first = 0, sfirst = 0;
-    while (first < snd_wave.size() && snd_wave[first] == 0) first++;
-    while (sfirst < got && src[sfirst] == 0) sfirst++;
-    long err = 0;
-    int cmp = 0;
-    for (size_t k = 0; first + k < snd_wave.size() && k < 2000; k++) {
-      size_t si = sfirst + (size_t) ((uint64_t) k * 22050 / 48000);
-      if (si >= got) break;
-      err += abs((int) snd_wave[first + k] - (int) src[si] * 255 / 256);
-      cmp++;
-    }
-    int bad = cmp ? (int) (err / cmp) : 99999;
-    printf("tb_menu_soc: the output against sound 1: mean difference %d over %d values\n", bad, cmp);
-    FILE *fo = fopen("sound_out.raw", "wb");
-    if (fo) { fwrite(snd_wave.data(), 2, snd_wave.size(), fo); fclose(fo); }
-    if (bad > 100 || cmp < 1000) { printf("tb_menu_soc: the sound is not sound 1\n"); errors++; }
-    want = "";  // the run ends in the sound, before the launch
+    printf("tb_menu_soc: start melody %s\n", melody_heard() ? "heard" : "NOT heard");
+    if (!melody_heard()) { printf("tb_menu_soc: no start melody on MIDI\n"); errors++; }
+    if (snd_peak) { printf("tb_menu_soc: PCM out of menu_sound (peak %d), none was asked\n", snd_peak); errors++; }
+    want = "";  // the run ends in the melody, before the launch
   }
   if (getenv("TB_WIFI")) want = "";   // the run ends on the Wi-Fi page
   if (launched != want) { printf("tb_menu_soc: launched '%s', want %s\n", launched.c_str(), want); errors++; }

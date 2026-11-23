@@ -4,7 +4,7 @@
 #include <sys/stat.h>
 #include "mmio.h"
 
-extern char __heap_start[], __heap_end[];   // link.ld: the program, the heap, the stack below the sounds
+extern char __heap_start[], __heap_end[];   // link.ld: the program, the heap, the stack below 0x200000
 static char *brk = __heap_start;
 
 void *_sbrk(ptrdiff_t n) {

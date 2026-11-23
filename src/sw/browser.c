@@ -91,7 +91,7 @@ static void draw_button(int i) {
   // hovered: a frame of 2 px in the active colour around the button (the FT812 menu)
   if (hover == i) gfx_round_rect(BX - 2, by - 2, BW + 4, BH + 4, 6, gfx_ramp_alpha(look.active));
   gfx_round_rect(BX, by, BW, BH, 4, gfx_ramp_alpha(on ? look.active : look.button));
-  gfx_text_center(&f28, BX + BW / 2, by + BH / 2, cores[vis[i]].name,
+  gfx_text_center(&f27, BX + BW / 2, by + BH / 2, cores[vis[i]].name,
                   on ? gfx_ramp_over(look.text_active, look.active) : gfx_ramp_over(look.text, look.button));
   // the autoload gauge: the seconds left of the countdown, on the left of the selected button
   if (on && autoload_left >= 0 && autoload_s > 0) {
@@ -118,7 +118,7 @@ static void draw_arrow(int next) {
   int cx = FB_W / 2 + (next ? 80 : -80);
   gfx_clear(cx - 16, FB_H - 54, 32, 28);
   if (pages() > 1)
-    gfx_text_center(&f28, cx, FB_H - 40, next ? ">" : "<",
+    gfx_text_center(&f27, cx, FB_H - 40, next ? ">" : "<",
                     hover == (next ? HIT_NEXT : HIT_PREV) ? gfx_ramp_alpha(look.text) : gfx_ramp_alpha(look.copyright));
 }
 
@@ -139,7 +139,7 @@ static void draw_page(void) {
   gfx_clear(BX - 4, CORE_TOP - 4, BW + 8, PAGE * CORE_STEP + 4);
   int from = page_of(sel) * PAGE;
   for (int i = from; i < from + PAGE && i < nvis; i++) draw_button(i);
-  if (!nvis) gfx_text_center(&f28, FB_W / 2, CORE_TOP + BH / 2,
+  if (!nvis) gfx_text_center(&f27, FB_W / 2, CORE_TOP + BH / 2,
                              cores_busy ? "The SD card is a USB drive of the PC" : "No cores on the SD card",
                              gfx_ramp_alpha(look.text));
   draw_footer();
@@ -156,9 +156,9 @@ static void draw_setup_ring(void) {
 static void draw_setup(void) {
   uint32_t c = setup_focus ? look.active : look.button;
   draw_setup_ring();
-  gfx_text_center(&f29, 36, 104, "S", gfx_ramp_over(setup_focus ? look.text_active : look.text, c));
+  gfx_text_center(&f27, 36, 104, "S", gfx_ramp_over(setup_focus ? look.text_active : look.text, c));
   gfx_clear(60, 90, 80, 30);
-  gfx_text(&f28, 62, 104 - f28.line / 2, "Setup", gfx_ramp_alpha(look.text));
+  gfx_text(&f27, 62, 104 - f27.line / 2, "Setup", gfx_ramp_alpha(look.text));
 }
 
 static void draw_all(void) {
@@ -248,12 +248,14 @@ static void last_write(const core_t *c) {
 }
 
 static void launch(int i) {
-  // the start sound of [ft812] sound (1..4, 0 none), to its end, as the FT812 menu
-  if (look.sound >= 1 && look.sound <= 4) {
-    dbg_puts("menu: start sound\n");
-    snd_start(look.sound);
+  // the start melody of [ft812] sound (MIDI), to its end; then 10 ms for the last bytes to leave the
+  // fifo of menu_midi_mux (31250 baud: 1 ms a byte), the CPU stops at the launch
+  if (look.sound) {
+    dbg_puts("menu: start melody\n");
+    melody_start();
+    while (melody_poll()) ;
     uint32_t t0 = R_MS;
-    while (snd_playing(0) && R_MS - t0 < 4000) ;
+    while (R_MS - t0 < 10) ;
   }
   last_write(&cores[vis[i]]);
   dbg_puts("menu: launch "); dbg_puts(cores[vis[i]].file); dbg_puts("\n");
@@ -372,8 +374,8 @@ void browser_msc_draw(void) {
   draw_clock();
   ramp_t t = gfx_ramp_alpha(look.text);
   int y = FB_H / 2 - 80;
-  gfx_text_center(&f30, FB_W / 2, y, "USB mass storage", t);
-  for (int i = 0; i < 6; i++) if (msc_lines[m][i][0]) gfx_text_center(&f28, FB_W / 2, y + 50 + i * 24, msc_lines[m][i], t);
+  gfx_text_center(&f27, FB_W / 2, y, "USB mass storage", t);
+  for (int i = 0; i < 6; i++) if (msc_lines[m][i][0]) gfx_text_center(&f27, FB_W / 2, y + 50 + i * 24, msc_lines[m][i], t);
   scr_end();
   dbg_puts("menu: msc screen\n");
 }

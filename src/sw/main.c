@@ -8,6 +8,7 @@
 #include "cores.h"
 #include "browser.h"
 #include "setup.h"
+#include "sound.h"
 
 int main(void) {
   dbg_puts("menu: start\n");
@@ -36,5 +37,6 @@ int main(void) {
     if (setup_active) setup_mouse(m); else browser_mouse(m);
     if (key_next(&e)) { if (setup_active) setup_key(&e); else browser_key(&e); }
     if (setup_active) setup_tick(); else browser_tick();
+    melody_poll();                 // the melody heard in Setup as it is chosen
   }
 }

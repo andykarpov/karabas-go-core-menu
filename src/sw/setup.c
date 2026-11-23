@@ -101,7 +101,7 @@ static void slider(int x, int cy, int w, uint32_t fill, int v, int range, int32_
   gfx_circle(kx, cy, 10, gfx_ramp(look.text, surface));
 }
 static void title(const char *t) {
-  gfx_text_left(&f29, PANEL_X + 16, TOP + TAB_H / 2, t, gfx_ramp_alpha(look.text));
+  gfx_text_left(&f27, PANEL_X + 16, TOP + TAB_H / 2, t, gfx_ramp_alpha(look.text));
   gfx_fill(PANEL_X + 16, TOP + 34, PANEL_W - 32, 1, RAMP_FULL(gfx_ramp_alpha(look.copyright)));
   gfx_fill(PANEL_X + 16, TOP + 33, PANEL_W - 32, 1, gfx_ramp_alpha(look.copyright) + 6);
   gfx_fill(PANEL_X + 16, TOP + 35, PANEL_W - 32, 1, gfx_ramp_alpha(look.copyright) + 6);
@@ -121,7 +121,7 @@ static void draw_tabs(void) {
     int chosen = i == tab, lit = chosen && focus == F_TABS;
     int h = tab_h();
     if (hit_add(TAB_X, tab_y(i), TAB_W, h, HIT_TAB + i)) hover_frame(TAB_X, tab_y(i), TAB_W, h);
-    button(TAB_X, tab_y(i), TAB_W, h, h < TAB_H ? &f27 : &f28, lit ? look.text_active : look.text, lit ? look.active : look.button,
+    button(TAB_X, tab_y(i), TAB_W, h, &f27, lit ? look.text_active : look.text, lit ? look.active : look.button,
            GFX_ALPHA, tab_names[i]);
     if (chosen && !lit) marker(TAB_X, tab_y(i), h, look.button);
   }
@@ -139,15 +139,15 @@ static void draw_value(int id, int y, int arrows, int32_t surf) {
     gfx_text_right(&f27, right - 60, cy, v, text);
     return;
   }
-  if (st->kind == SK_PAGE) { gfx_text_center(&f28, right - 12, cy, ">", text); return; }
+  if (st->kind == SK_PAGE) { gfx_text_center(&f27, right - 12, cy, ">", text); return; }
   settings_value_text(id, v, sizeof(v));
   // a long name is cut to fit between the arrows
   int n = str_len(v);
-  while (n > 3 && gfx_text_width(&f28, v) > VALUE_W - 48) { v[--n] = 0; v[n - 1] = '.'; v[n - 2] = '.'; }
-  gfx_text_center(&f28, right - VALUE_W / 2, cy, v, text);
+  while (n > 3 && gfx_text_width(&f27, v) > VALUE_W - 48) { v[--n] = 0; v[n - 1] = '.'; v[n - 2] = '.'; }
+  gfx_text_center(&f27, right - VALUE_W / 2, cy, v, text);
   if (arrows) {
-    gfx_text_center(&f28, right - VALUE_W + 12, cy, "<", text);
-    gfx_text_center(&f28, right - 12, cy, ">", text);
+    gfx_text_center(&f27, right - VALUE_W + 12, cy, "<", text);
+    gfx_text_center(&f27, right - 12, cy, ">", text);
   }
 }
 
@@ -166,7 +166,7 @@ static void draw_page(void) {
     }
     hovered |= hit_add(PANEL_X, y, PANEL_W, ROW_H, HIT_ROW + i);
     int32_t surf = row_back(PANEL_X, y, PANEL_W, ROW_H, focused, hovered);
-    gfx_text_left(&f28, PANEL_X + 16, y + ROW_H / 2, settings[p->ids[i]].label, gfx_ramp(look.text, surf));
+    gfx_text_left(&f27, PANEL_X + 16, y + ROW_H / 2, settings[p->ids[i]].label, gfx_ramp(look.text, surf));
     draw_value(p->ids[i], y, focused || hovered, surf);
   }
 }
@@ -181,16 +181,16 @@ static void draw_color(void) {
   title(b);
   gfx_solid_rect(PANEL_X + 12, TOP + 44, 104, 72, gfx_color(c));
   hex6(b, c);
-  gfx_text_left(&f30, PANEL_X + 128, TOP + 80, b, gfx_ramp_alpha(look.text));
+  gfx_text_left(&f27, PANEL_X + 128, TOP + 80, b, gfx_ramp_alpha(look.text));
   for (int i = 0; i < 3; i++) {
     int y = TOP + 128 + i * ROW_STEP, v = (c >> (16 - 8 * i)) & 0xff;
     int hovered = hit_add(PANEL_X + 40, y, PANEL_W - 48 - 56, ROW_H, HIT_SLIDER + i);
     hovered |= hit_add(PANEL_X, y, PANEL_W, ROW_H, HIT_CHAN + i);
     int32_t surf = row_back(PANEL_X, y, PANEL_W, ROW_H, i == color_ch, hovered);
-    gfx_text_left(&f28, PANEL_X + 16, y + ROW_H / 2, names[i], gfx_ramp(look.text, surf));
+    gfx_text_left(&f27, PANEL_X + 16, y + ROW_H / 2, names[i], gfx_ramp(look.text, surf));
     slider(PANEL_X + 48, y + ROW_H / 2, PANEL_W - 48 - 72, fills[i], v, 255, surf);
     u2s(b, (uint32_t) v, 1);
-    gfx_text_right(&f28, PANEL_X + PANEL_W - 16, y + ROW_H / 2, b, gfx_ramp(look.text, surf));
+    gfx_text_right(&f27, PANEL_X + PANEL_W - 16, y + ROW_H / 2, b, gfx_ramp(look.text, surf));
   }
 }
 
@@ -210,14 +210,14 @@ static void draw_dialog(void) {
   hit_clear();                   // only the buttons of the dialog take clicks
   ft_rect(x - 3, y - 3, w + 6, h + 6, 8, look.active, GFX_ALPHA);
   ft_rect(x, y, w, h, 8, look.button, (int32_t) look.active);
-  gfx_text_center(&f29, x + w / 2, y + 30, t, gfx_ramp_over(look.text, look.button));
+  gfx_text_center(&f27, x + w / 2, y + 30, t, gfx_ramp_over(look.text, look.button));
   gfx_text_center(&f27, x + w / 2, y + 66, sub, gfx_ramp_over(look.copyright, look.button));
   int by = y + h - 56;
   if (hit_add(x + 40, by, 140, TAB_H, HIT_DLG_LEFT)) ft_rect(x + 40, by, 140, TAB_H, 2, look.active, (int32_t) look.button);
   if (hit_add(x + w - 180, by, 140, TAB_H, HIT_DLG_RIGHT)) ft_rect(x + w - 180, by, 140, TAB_H, 2, look.active, (int32_t) look.button);
-  button(x + 40, by, 140, TAB_H, &f28, dialog_left ? look.text_active : look.text, dialog_left ? look.active : look.bg,
+  button(x + 40, by, 140, TAB_H, &f27, dialog_left ? look.text_active : look.text, dialog_left ? look.active : look.bg,
          (int32_t) look.button, left);
-  button(x + w - 180, by, 140, TAB_H, &f28, !dialog_left ? look.text_active : look.text, !dialog_left ? look.active : look.bg,
+  button(x + w - 180, by, 140, TAB_H, &f27, !dialog_left ? look.text_active : look.text, !dialog_left ? look.active : look.bg,
          (int32_t) look.button, right);
 }
 
@@ -351,7 +351,7 @@ static void change(int d) {
     return;
   }
   settings_change(id, d);
-  if (id == S_SOUND) snd_start(set_val[S_SOUND]);   // heard as it is chosen (Off stops it)
+  if (id == S_SOUND) { if (set_val[S_SOUND]) melody_start(); else melody_stop(); }   // heard as it is chosen
 }
 
 static void mode_end(int keep) {
@@ -608,7 +608,7 @@ static void draw_field(int x, int w, int focused_page, int i, int y, const char 
   for (int j = 0; j < f->len && focused_page; j++) hit_add(fx + 8 + j * CHAR_W, y, CHAR_W, FIELD_H, HIT_PAGE + CH_CHAR + 20 * i + j);
   int hovered = focused_page && hit_add(x, y, w, FIELD_H, HIT_PAGE + CH_FIELD + i);
   int32_t surf = focused_page ? row_back(x, y, w, FIELD_H, focused, hovered) : GFX_ALPHA;
-  gfx_text_left(&f28, x + 16, y + FIELD_H / 2, label, gfx_ramp(look.text, surf));
+  gfx_text_left(&f27, x + 16, y + FIELD_H / 2, label, gfx_ramp(look.text, surf));
   if (focused) gfx_round_rect(fx - 2, y - 2, fw + 4, FIELD_H + 4, 4, gfx_ramp(look.active, surf));
   gfx_round_rect(fx, y, fw, FIELD_H, 4, gfx_ramp(look.bg, focused ? (int32_t) look.active : surf));
   for (int j = 0; j < f->len; j++) {
@@ -627,7 +627,7 @@ static void draw_field(int x, int w, int focused_page, int i, int y, const char 
 void page_button(int x, int y, int w, const char *label, int focused, int focused_page, int id) {
   int lit = focused && focused_page;
   if (focused_page && hit_add(x, y, w, TAB_H, HIT_PAGE + id)) hover_frame(x, y, w, TAB_H);
-  button(x, y, w, TAB_H, &f28, lit ? look.text_active : look.text, lit ? look.active : look.button, GFX_ALPHA, label);
+  button(x, y, w, TAB_H, &f27, lit ? look.text_active : look.text, lit ? look.active : look.button, GFX_ALPHA, label);
 }
 
 static void clock_draw(int x, int y0, int w, int h, int focused) {
@@ -647,19 +647,19 @@ static void clock_draw(int x, int y0, int w, int h, int focused) {
   int32_t surf = focused ? row_back(x, ty, w, FIELD_H, tzf, hovered) : GFX_ALPHA;
   ramp_t text = gfx_ramp(look.text, surf);
   char v[16];
-  gfx_text_left(&f28, x + 16, ty + FIELD_H / 2, "Time zone", text);
+  gfx_text_left(&f27, x + 16, ty + FIELD_H / 2, "Time zone", text);
   settings_value_text(S_TZ, v, sizeof(v));
-  gfx_text_center(&f28, vx + TZ_W / 2, ty + FIELD_H / 2, v, text);
+  gfx_text_center(&f27, vx + TZ_W / 2, ty + FIELD_H / 2, v, text);
   if (tzf || hovered) {
-    gfx_text_center(&f28, vx + 12, ty + FIELD_H / 2, "<", text);
-    gfx_text_center(&f28, vx + TZ_W - 12, ty + FIELD_H / 2, ">", text);
+    gfx_text_center(&f27, vx + 12, ty + FIELD_H / 2, "<", text);
+    gfx_text_center(&f27, vx + TZ_W - 12, ty + FIELD_H / 2, ">", text);
   }
   int by = y + 128;
   page_button(x + 16, by, 140, "Set", c_focus == C_SET, focused, CH_SET);
   page_button(x + 172, by, 140, "NTP sync", c_focus == C_SYNC, focused, CH_SYNC);
   const char *m = ntp_sync_state() == NTP_BUSY ? ntp_sync_message() : c_msg;   // the progress as it goes
   if (m && focused)
-    gfx_text_left(&f28, x + 16, by + TAB_H + 24, m,
+    gfx_text_left(&f27, x + 16, by + TAB_H + 24, m,
                   gfx_ramp_alpha(ntp_sync_state() == NTP_BUSY ? look.text : c_msg_ok ? OK_COLOR : ERROR_COLOR));
 }
 

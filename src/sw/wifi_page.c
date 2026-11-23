@@ -33,12 +33,12 @@ static const char *fit(const font_t *f, const char *s, int w) {
 }
 
 static void info(int y, const char *label, const char *value, uint32_t color) {
-  gfx_text_left(&f28, px + 16, y, label, gfx_ramp_alpha(look.text));
-  gfx_text_left(&f28, px + INFO_X, y, fit(&f28, value, pw - INFO_X - 16), gfx_ramp_alpha(color));
+  gfx_text_left(&f27, px + 16, y, label, gfx_ramp_alpha(look.text));
+  gfx_text_left(&f27, px + INFO_X, y, fit(&f27, value, pw - INFO_X - 16), gfx_ramp_alpha(color));
 }
 
 static void message(int y, const char *msg, uint32_t color) {
-  gfx_text_left(&f28, px + 16, y, fit(&f28, msg, pw - 32), gfx_ramp_alpha(color));
+  gfx_text_left(&f27, px + 16, y, fit(&f27, msg, pw - 32), gfx_ramp_alpha(color));
 }
 
 // the text field: one char per CHAR_W, the tail that fits, a cyan cursor at the end
@@ -96,11 +96,11 @@ static void list(void) {
     int32_t surf = pfocused ? row_back(px, y, pw, LIST_ROW_H - 2, top + row == w->sel && !w->on_rescan, hovered) : GFX_ALPHA;
     char b[8];
     snprintf(b, sizeof(b), "%d", ap->rssi);
-    gfx_text_right(&f28, px + 60, cy, b, gfx_ramp(look.text, surf));
+    gfx_text_right(&f27, px + 60, cy, b, gfx_ramp(look.text, surf));
     int joined = strcmp(ap->ssid, w->cur_ssid) == 0;
     uint32_t color = joined ? look.active : look.text;
     lock(px + 72, cy, ap->ecn != 0, color, surf);
-    gfx_text_left(&f28, px + 96, cy, fit(&f28, ap->ssid, pw - 112), gfx_ramp(color, surf));
+    gfx_text_left(&f27, px + 96, cy, fit(&f27, ap->ssid, pw - 112), gfx_ramp(color, surf));
   }
 }
 
@@ -184,7 +184,7 @@ static void draw(int x, int y, int w, int h, int focused) {
       gfx_round_rect(bx + 2, by + 2, bw - 4, BAR_H - 4, 3, gfx_ramp_over(look.bg, look.copyright));
       if (percent > 0) gfx_round_rect(bx + 2, by + 2, (bw - 4) * percent / 100, BAR_H - 4, 3, gfx_ramp_over(look.active, look.bg));
       snprintf(buf, sizeof(buf), "%u%%", percent);
-      gfx_text_right(&f28, bx + bw + 56, by + BAR_H / 2, buf, gfx_ramp_alpha(look.text));
+      gfx_text_right(&f27, bx + bw + 56, by + BAR_H / 2, buf, gfx_ramp_alpha(look.text));
       message(y + INFO_STEP * 3 + 4, "Do not power off the board", look.copyright);
       break;
     }

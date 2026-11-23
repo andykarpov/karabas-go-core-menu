@@ -1,5 +1,5 @@
-/* The menu program in the SRAM (menu_soc): program, data, heap and stack below the sounds
-   (0x200000, sounds.bin of boot.kg) and the frame buffers (FB0 0x300000, FB1 0x380000), MMIO at
+/* The menu program in the SRAM (menu_soc): program, data, heap and stack below 0x200000
+   (free from there: the PCM sounds of before) and the frame buffers (FB0 0x300000, FB1 0x380000), MMIO at
    0x80000000. */
 OUTPUT_ARCH("riscv")
 ENTRY(_start)
