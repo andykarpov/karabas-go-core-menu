@@ -201,7 +201,7 @@ CEA mode at all; the FT812 menu before it ran 640 x 480 by default (mode 0 of th
 The firmware loaded 530 KB of ROMs after the bitstream (menu.bin 218 KB, sounds.bin 312 KB).
 
 - No PCM sounds: roms/sounds.bin, sounds_gen.h and mksounds.py are gone, the program plays none
-  (menu_sound.v stays in the bitstreams until the next ISE build, silent). The start sound is a MIDI
+  (menu_sound.v stays in the bitstreams, silent: kept for a PCM use later, user). The start sound is a MIDI
   melody in menu.bin ("ta-dan": C5 E5 G5 of 120 ms, the chord C6 G5 E5 for 500 ms, GM Vibraphone on
   channel 16, its program back to 0 at the end; chosen from six by the user); Setup > Sound > Start
   sound is On / Off (`[ft812] sound` 1 / 0, the old 2..4 read as On). The key click stays (Cowbell).
