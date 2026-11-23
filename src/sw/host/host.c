@@ -96,7 +96,7 @@ int rpc_call(uint8_t svc, uint8_t fn, const void *in_, uint16_t in_len, void *ou
   uint8_t *out = out_;
   (void) out_max; (void) timeout_ms;
   *out_len = 0;
-  if (svc == RPC_SYS && fn == 0) { memcpy(out, "DEVBUILD", 8); *out_len = 12; return RPC_OK; }
+  if (svc == RPC_SYS && fn == 0) { memcpy(out, "DEVBUILD", 8); out[8] = getenv("HOST_BOARD") ? (uint8_t) atoi(getenv("HOST_BOARD")) : 3; out[9] = 1; out[10] = 15; out[11] = 0; *out_len = 12; return RPC_OK; }
   if (svc == RPC_SYS && fn == 1) {
     uint8_t t[8] = { 2026 & 255, 2026 >> 8, 11, 21, 12, 59, (uint8_t) (now_ms / 1000 % 60), 6 };
     memcpy(out, t, 8); *out_len = 8; return RPC_OK;

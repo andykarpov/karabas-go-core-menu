@@ -5,6 +5,7 @@
 #include "mmio.h"
 #include "rpc.h"
 #include "images_gen.h"
+#include "cores.h"
 #include "sound.h"
 
 // ---- strings ----
@@ -110,7 +111,8 @@ void draw_logo(void) {
   static uint8_t map[LOGO_COLORS];
   map[0] = 0;
   for (int i = 1; i < LOGO_COLORS; i++) map[i] = gfx_color(logo_pal[i]);
-  gfx_indexed(8, 8, LOGO_W, LOGO_H, 4, logo_px, map);   // the logo, x4
+  // the logo of the board (SYS INFO): "karabas GO" on the Go, "karabas miniGO" on the Mini / Mini G
+  gfx_indexed(8, 8, LOGO_W, LOGO_H, 4, hw_id == 1 ? logo_go_px : logo_mini_px, map);   // x4
 }
 
 void draw_clock(void) {
