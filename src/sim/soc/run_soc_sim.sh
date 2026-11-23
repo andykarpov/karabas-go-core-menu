@@ -17,6 +17,9 @@ TB_MOUSE=1 TB_FRAME=frame_mouse.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.b
 # the wheel: a notch towards the user moves the focus down as the Down key, Enter starts b.kg
 echo "tb_menu_soc: the wheel run"
 TB_WHEEL=1 TB_FRAME=frame_wheel.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|launch"
+# the last core ([autoload] last_core=c.kg, no autoload): the list starts on c.kg, Down, Enter start d.kg
+echo "tb_menu_soc: the last core run"
+TB_LOOK=last_core=c.kg TB_FRAME=frame_last.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|launch|last core"
 # the start sound of [ft812] sound after Enter: PCM out of menu_sound
 echo "tb_menu_soc: the sound run"
 TB_SOUND=1 TB_FRAME=frame_sound.ppm ./obj_soc/Vtb_menu_soc ../../sw/build/menu.bin | grep -E "tb_menu_soc|sound"

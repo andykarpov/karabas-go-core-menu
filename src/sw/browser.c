@@ -48,6 +48,7 @@ void cores_read(void) {
     int f = 0;
     for (char *q = flags; *q; q++) f = f * 10 + (*q - '0');
     c->visible = f & 1;
+    c->type = (uint8_t) (f >> 1);
     if (c->visible) vis[nvis++] = ncores;   // visible ones only in the list
     ncores++;
   }
@@ -220,6 +221,30 @@ static void move_to(int n) {
   else { draw_button(old); draw_button(sel); draw_footer(); }
 }
 
+// the core started last ([autoload] last_core of karabas.ini, its file name): the selected one at the start
+// when there is no autoload; written by the launch of another one (not a boot or hidden core)
+#define LAST_SECTION "autoload"
+#define LAST_KEY "last_core"
+static char last_file[33] = "";
+
+static void last_read(void) {
+  static const char req[] = "0\0" LAST_SECTION "\0" LAST_KEY;   // with its NUL at the end
+  uint16_t n;
+  last_file[0] = 0;
+  if (rpc_call(RPC_CFG, 0, req, sizeof(req), buf, sizeof(buf), &n, 1000) != RPC_OK || n < 2 || !buf[0]) return;
+  const uint8_t *p = buf + 1;
+  copy_str(last_file, 33, &p, buf + n);
+}
+
+static void last_write(const core_t *c) {
+  if (!c->visible || c->type == 0 || c->type == 255 || str_eq(c->file, last_file)) return;
+  char req[64], *p = req;
+  p = str_cpy(p, "0") + 1; p = str_cpy(p, LAST_SECTION) + 1; p = str_cpy(p, LAST_KEY) + 1; p = str_cpy(p, c->file) + 1;
+  uint16_t n;
+  int st = rpc_call(RPC_CFG, 1, req, (uint16_t) (p - req), buf, sizeof(buf), &n, 2000);   // written at once
+  dbg_puts(st == RPC_OK ? "menu: last core saved\n" : "menu: last core not saved\n");
+}
+
 static void launch(int i) {
   // the start sound of [ft812] sound (1..4, 0 none), to its end, as the FT812 menu
   if (look.sound >= 1 && look.sound <= 4) {
@@ -228,6 +253,7 @@ static void launch(int i) {
     uint32_t t0 = R_MS;
     while (snd_playing(0) && R_MS - t0 < 4000) ;
   }
+  last_write(&cores[vis[i]]);
   dbg_puts("menu: launch "); dbg_puts(cores[vis[i]].file); dbg_puts("\n");
   rpc_launch(cores[vis[i]].file);
 }
@@ -240,8 +266,12 @@ static void stop_autoload(void) {
 }
 
 void browser_start(void) {
+  if (rpc_enabled() && !cores_busy) last_read();
   for (int i = 0; i < nvis; i++)
     if (autoload_s && str_eq(cores[vis[i]].file, autoload_file)) { sel = i; autoload_left = autoload_s; t_auto = R_MS; }
+  // no autoload (off, its core not on the card, or a return to the menu): the core started last
+  if (autoload_left < 0)
+    for (int i = 0; i < nvis; i++) if (last_file[0] && str_eq(cores[vis[i]].file, last_file)) sel = i;
 }
 
 void browser_open(void) {

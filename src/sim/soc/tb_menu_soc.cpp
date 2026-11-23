@@ -176,7 +176,7 @@ static const char *files[NCORES] = { "a.kg", "b.kg", "c.kg", "d.kg", "e.kg", "f.
 static const char *names[NCORES] = { "Acorn Archimedes", "Agon", "Alf", "Amstrad CPC", "Apple //e", "Atari 2600",
   "Atari 800XL", "Atari ST", "BBC Micro", "BK-0011M", "\xd0\xa1\xd0\xbf\xd0\xb5\xd1\x86\xd0\xb8\xd0\xb0\xd0\xbb\xd0\xb8\xd1\x81\xd1\x82",
   "Commodore 64", "Doom", "MSX2", "ZX Spectrum Next" };
-static std::string launched;
+static std::string launched, last_set;   // last_set: the value of [autoload] last_core of a CFG SET
 static int served = 0, cfg_calls = 0;
 
 static void serve() {
@@ -205,7 +205,12 @@ static void serve() {
       put_s(out, l.substr(v, e - v).c_str());
     }
   }
-  else if (r.svc == 1) { cfg_calls++; }   // SET, SAVE, PREVIEW: ok
+  else if (r.svc == 1) {   // SET, SAVE, PREVIEW: ok
+    cfg_calls++;
+    std::vector<std::string> a;
+    for (size_t p = 0; p < r.data.size(); p += strlen((const char *) r.data.data() + p) + 1) a.push_back((const char *) r.data.data() + p);
+    if (r.fn == 1) for (size_t k = 1; k + 2 < a.size(); k += 3) if (a[k] == "autoload" && a[k + 1] == "last_core") last_set = a[k + 2];
+  }
   else if (r.svc == 2 && r.fn == 1) {
     int i = r.data[0] | (r.data[1] << 8);
     if (i < NCORES) { put_s(out, files[i]); put_s(out, names[i]); put_s(out, "26112101"); put_s(out, names[i]); put_s(out, "3"); }
@@ -349,14 +354,16 @@ int main(int argc, char **argv) {
     for (uint32_t p : frame) { if (p == 0xffffff) white++; if (p == 0x2850d8) selc++; }
     // the button of the second core (Agon after Down) in the active colour 0x0000c8, the first in
     // the button colour 0x202026 (the defaults of the firmware): a pixel left of the text
-    uint32_t b1 = frame[(88 + 16) * W + 220], b2 = frame[(88 + 40 + 16) * W + 220];
-    printf("tb_menu_soc: the frame is %d x %d\n", W, H);
+    // (last_core=c.kg: the fourth one after Down, the first stays in the button colour)
     const char *lk = getenv("TB_LOOK");
+    int row = lk && strstr(lk, "last_core=c.kg") ? 3 : 1;
+    uint32_t b1 = frame[(88 + 16) * W + 220], b2 = frame[(88 + 40 * row + 16) * W + 220];
+    printf("tb_menu_soc: the frame is %d x %d\n", W, H);
     int want_w = lk && strstr(lk, "video_mode=1") ? 800 : 640;
     if (W != want_w) { printf("tb_menu_soc: the video mode is not that of karabas.ini (%d wanted)\n", want_w); errors++; }
     if (white < 1000) { printf("tb_menu_soc: %d white pixels, no text\n", white); errors++; }
     if (getenv("TB_MOUSE") || getenv("TB_WIFI")) b1 = 0x202026, b2 = 0x0000c8;   // not the list  // the frame is before the clicks: not checked
-    if (b2 != 0x0000c8) { printf("tb_menu_soc: the second button is not active (%06x)\n", b2); errors++; }
+    if (b2 != 0x0000c8) { printf("tb_menu_soc: the button %d is not active (%06x)\n", row + 1, b2); errors++; }
     if (b1 != 0x202026) { printf("tb_menu_soc: the first button is not a button (%06x)\n", b1); errors++; }
     printf("tb_menu_soc: frame.ppm, %d white, %d selection pixels\n", white, selc);
   }
@@ -377,7 +384,9 @@ int main(int argc, char **argv) {
     printf("tb_menu_soc: %d AT commands to the ESP\n", esp_cmds);
     if (esp_cmds < 6 || console.find("ESP << +CWJAP:\"TestNet\"") == std::string::npos) { printf("tb_menu_soc: no Wi-Fi status\n"); errors++; }
   }
-  const char *want = getenv("TB_MOUSE") ? "d.kg" : "b.kg";  // the pointer is on the fourth core
+  // the pointer is on the fourth core; TB_LOOK=last_core=c.kg: the list starts on c.kg, Down to d.kg
+  const char *lk0 = getenv("TB_LOOK");
+  const char *want = getenv("TB_MOUSE") ? "d.kg" : lk0 && strstr(lk0, "last_core=c.kg") ? "d.kg" : "b.kg";
   // the click of Down / the mouse: Cowbell on channel 10, on and off
   {
     static const uint8_t click[6] = { 0x99, 56, 100, 0x89, 56, 0 };
@@ -417,6 +426,9 @@ int main(int argc, char **argv) {
   if (getenv("TB_WIFI")) want = "";   // the run ends on the Wi-Fi page
   if (launched != want) { printf("tb_menu_soc: launched '%s', want %s\n", launched.c_str(), want); errors++; }
   else printf("tb_menu_soc: LAUNCH %s after the clear\n", launched.c_str());
+  // the started core is written to [autoload] last_core before the LAUNCH
+  if (last_set != want) { printf("tb_menu_soc: last_core '%s', want %s\n", last_set.c_str(), want); errors++; }
+  else if (*want) printf("tb_menu_soc: last_core %s saved\n", last_set.c_str());
   printf("tb_menu_soc: %d errors\n", errors);
   delete t;
   return errors ? 1 : 0;

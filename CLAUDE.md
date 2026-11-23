@@ -17,7 +17,7 @@ The boot menu core of the Karabas Go, Mini and Mini G boards: Xilinx Spartan-6 X
 
 The board modules (MCU link, memories, clocks, DACs, OSD, HDMI) come from the git submodule `modules/` ([karabas-go-modules](https://github.com/andykarpov/karabas-go-modules), shared by the Karabas Go cores; clone with `--recursive` or run `git submodule update --init`). A change to them is made there and taken here by updating the submodule commit. Its `CLAUDE.md` and `docs/PLAN.md` have the rules (Verilog-2001 for XST, tests, checks of LUTs and timing).
 
-This core is the loader of every other core: a broken build leaves the board without a menu. Test in simulation and on the hardware of the three boards before a release. Until the release a test build goes to the card as a separate core `menutest.kg` (type osd, CORES in its HELLO; a boot type core cannot be started by AT load), never over the real `boot.kg` (user rule).
+This core is the loader of every other core: a broken build leaves the board without a menu. Test in simulation and on the hardware of the three boards before a release. Test builds are `boot.kg` itself (user rule since 2026-11-23: the self-drawing menu is the boot core on the boards; `menutest.kg` is not built any more). A change of the CPU program only (`src/sw`) needs no ISE run: the committed bitstreams are repacked with the new `roms/menu.bin` (`python3 make_core.py core.json boot.kg`, the `build` of the json bumped).
 
 ## Build
 

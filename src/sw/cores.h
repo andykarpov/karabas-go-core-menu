@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #define MAX_CORES 128
-typedef struct { char file[33], name[33], id[33]; uint8_t visible; } core_t;
+typedef struct { char file[33], name[33], id[33]; uint8_t visible, type; } core_t;   // type: 0 boot, 1 osd, 2 fileloader, 255 hidden
 extern core_t cores[MAX_CORES];  // all of them (Setup > Autoload > Core)
 extern int ncores;
 extern char autoload_file[33];   // CORES AUTOLOAD: "" none
