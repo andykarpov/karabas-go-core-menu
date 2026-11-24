@@ -65,20 +65,23 @@ static void run_ms(int ms) { uint32_t end = now_ms + ms; while (now_ms < end) se
 static const char *ini[][3] = {
   { "setup", "debug", "1" }, { "setup", "dvi_only", "0" }, { "setup", "core_sort", "name" }, { "setup", "tz", "+01:00" },
   { "matrix", "enabled", "1" }, { "matrix", "brightness", "1" },
-  { "autoload", "enabled", "0" }, { "autoload", "timeout", "10" }, { "autoload", "core", "pro" },
+  { "autoload", "enabled", "0" }, { "autoload", "timeout", "10" }, { "autoload", "core", "profi" },
   { "ft812", "time", "1" }, { "ft812", "date", "1" }, { "ft812", "char", "1" }, { "ft812", "mouse_speed", "5" },
   { "ft812", "sound", "1" }, { "ft812", "click", "1" }, { "ft812", "video_mode", "0" },
   { "ft812", "color_bg", "000608" }, { "ft812", "color_gradient", "006a80" }, { "ft812", "color_button", "0e2228" },
   { "ft812", "color_active", "00a0b8" }, { "ft812", "color_text", "e0fcff" }, { "ft812", "color_text_active", "ffffff" },
   { "ft812", "color_copyright", "5a8088" },
+  { "groups", "c64", "My cores" }, { "groups", "zxuno", "My cores" }, { "groups", "bbc", "" },   // the user's
 };
 static const char *core_list[][3] = {   // file, name, id
   { "boot.kg", "Boot Menu", "boot" }, { "archie.kg", "Acorn Archimedes", "archie" }, { "agon.kg", "Agon", "agon" },
   { "alf.kg", "Alf", "alf" }, { "cpc.kg", "Amstrad CPC", "cpc" }, { "apple2.kg", "Apple //e", "apple2" },
-  { "a2600.kg", "Atari 2600", "a2600" }, { "a800.kg", "Atari 800XL", "a800" }, { "atarist.kg", "Atari ST", "atarist" },
-  { "bbc.kg", "BBC Micro", "bbc" }, { "bk.kg", "BK-0011M", "bk" }, { "pro.kg", "Karabas Pro +", "pro" },
+  { "atari2600.kg", "Atari 2600", "atari2600" }, { "atari800.kg", "Atari 800XL", "atari800" }, { "atarist.kg", "Atari ST", "atarist" },
+  { "bbc.kg", "BBC Micro", "bbc" }, { "bk.kg", "BK-0011M", "bk" }, { "profi.kg", "Karabas Pro +", "profi" },
   { "c64.kg", "Commodore 64", "c64" }, { "msx.kg", "MSX", "msx" }, { "nes.kg", "NES", "nes" },
   { "sega.kg", "Sega Mega Drive", "sega" }, { "vic20.kg", "VIC-20", "vic20" }, { "zxuno.kg", "ZX-Uno", "zxuno" },
+  { "tsconf.kg", "TS-Conf +", "tsconf" }, { "uknc.kg", "UKNC MC-0511", "uknc" }, { "doom.kg", "Doom", "doom" },
+  { "x.kg", "Unknown core", "x" },
 };
 #define NCORES ((int) (sizeof(core_list) / sizeof(core_list[0])))
 
@@ -189,6 +192,8 @@ static void keys(const char *s) {   // a script: u d l r e x(esc) t(tab) b(bksp)
   }
 }
 
+static void type(const char *s) { for (; *s; s++) { key_ev_t e = { 0 }; e.key = 0x04; e.ch = *s; browser_key(&e); } }
+
 static void stuck(int sig) {   // a hang: where (addr2line on the addresses)
   void *bt[16];
   (void) sig;
@@ -236,6 +241,17 @@ int main(int argc, char **argv) {
     dump("00j_click_prev");
     ptr.x = 700; ptr.y = 300; browser_mouse(M_MOVED); ptr.visible = 0; browser_mouse(M_MOVED);
   }
+  // the groups: Computers open, its next page, back to the top
+  keys("dde");                                   dump("00k_group_open");
+  keys("r");                                     dump("00l_group_page2");
+  keys("x");                                     dump("00m_group_closed");
+  // a core moved (G): into a new group (alone in it: shown at the top), then back to Computers
+  keys("e");  type("g");                         dump("00n_move");
+  key(K_END); keys("e"); type("Fav");            dump("00o_move_new");
+  keys("e");                                     dump("00p_moved");
+  type("g"); key(K_HOME); keys("ddd");           dump("00q_move_back");
+  keys("e");                                     dump("00r_moved_back");
+  keys("x"); key(K_HOME);
   keys("l");                                     dump("00b_setup_focus");   // Left on the first core
   keys("r");                                     dump("00c_setup_unfocus");
   keys("le");                                    dump("01_tabs_system");    // Enter on the Setup button
@@ -252,7 +268,7 @@ int main(int argc, char **argv) {
   keys("xd");                                    dump("09_tabs_wifi");
   keys("d");                                     dump("10_tabs_gamepad");
   keys("d");                                     dump("11_tabs_save");
-  keys("uuuuuuuueddddde");                       dump("12_matrix_effects");
+  keys("uuuuuuuuedddddde");                       dump("12_matrix_effects");
   keys("r");                                     dump("13_matrix_changed");
   keys("xxx");                                   dump("14_dialog");
   keys("le");                                    dump("15_back_dropped");
