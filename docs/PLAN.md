@@ -216,7 +216,7 @@ The firmware loaded 530 KB of ROMs after the bitstream (menu.bin 218 KB, sounds.
 ## Ф6: core groups (user, 2026-11-24)
 
 Status: step 1 RELEASED 2026-11-24 (boot.kg 26112402; the look approved by the user on the frames
-and on the Mini G); steps 2-4 open.
+and on the Mini G). Steps 2-4 are in the backlog (Open items, user 2026-11-24: step 1 is enough for now).
 
 The core list gets one level of groups (no groups in groups). Studied: MiST (subfolders of the SD
 with the system attribute), MiSTer (`_` folders, `names.txt`, `.mgl` shortcuts, `_@Favorites` of a
@@ -256,4 +256,6 @@ script), Analogue Pocket (`category` of `platform.json`, set by the author). Cho
 
 ## Open items
 
+- Backlog of Ф6 (core groups, later): `group` in `core.json` -> the CORE record of kgo2 (make_core of
+  tools), `CORES ITEM` 6th field in the firmware, the key in the cores at their builds; Recent / Favorites.
 - FS sandbox for other cores: a `core.json` key with the allowed roots (tools `make_core`).
