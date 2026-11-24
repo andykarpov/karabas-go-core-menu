@@ -10,7 +10,7 @@ static int8_t core_group[MAX_CORES];
 static uint8_t buf[RPC_MAX];
 
 // the groups of the table, in the order of the list; the groups of the user come after them, by name
-static const char *const known[] = { "ZX Spectrum", "USSR", "Computers", "Consoles", "Games", "Utilities" };
+static const char *const known[] = { "ZX Spectrum", "exUSSR", "Computers", "Consoles", "Games", "Utilities" };
 #define KNOWN ((int) (sizeof(known) / sizeof(known[0])))
 
 // the cores of today by their id (docs/PLAN.md Ф6, 2026-11-24); later the `group` of core.json comes first

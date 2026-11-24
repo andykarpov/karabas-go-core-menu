@@ -135,6 +135,13 @@ static void draw_folder(int x, int cy, ramp_t r) {
   gfx_round_rect(x, cy - 5, 20, 13, 2, r);
 }
 
+// an arrow to the left in the place of the folder: the button out of the group open
+static void draw_back(int x, int cy, ramp_t r) {
+  gfx_hand(x, cy, 20, 90, r);
+  gfx_hand(x, cy, 8, 45, r);
+  gfx_hand(x, cy, 8, 135, r);
+}
+
 static void draw_button(int i) {
   int by = CORE_TOP + (i % PAGE) * CORE_STEP, cy = by + BH / 2;
   int on = i == sel && !setup_focus, e = vis[i];
@@ -146,9 +153,8 @@ static void draw_button(int i) {
   gfx_round_rect(BX, by, BW, BH, 4, gfx_ramp_alpha(bg));
   if (e >= 0) gfx_text_center(&f27, BX + BW / 2, cy, cores[e].name, r);
   else if (e == E_BACK) {
-    char b[GROUP_LEN + 4];
-    str_cpy(str_cpy(b, "< "), group_names[open_group]);
-    gfx_text_center(&f27, BX + BW / 2, cy, b, r);
+    draw_back(BX + 14, cy, r);
+    gfx_text_center(&f27, BX + BW / 2, cy, group_names[open_group], r);
   } else {
     int g = E_GROUP_OF(e);
     char b[8];
@@ -398,7 +404,9 @@ static void set_setup_focus(int on) {
 }
 
 // ---- the move of a core to another group: G or the right button on a core ----
-// the rows: No group, the groups, New group... (a name typed in its place)
+// the rows: + New group (a name typed in its place), No group, the groups; more groups than fit scroll,
+// a chevron on the right says there are more above / below
+enum { R_NEW, R_NONE, R_GROUP };
 static int mv_row, mv_first, mv_edit, mv_hover = HIT_NONE;
 static char mv_name[GROUP_LEN + 1];
 #define MV_W 360
@@ -406,14 +414,17 @@ static char mv_name[GROUP_LEN + 1];
 #define MV_TOP 56                // the title
 #define MV_BOTTOM 44             // the keys
 #define HIT_MV 2000
-static int mv_rows(void) { return ngroups + 2; }
+#define HIT_MV_UP 1998
+#define HIT_MV_DOWN 1999
+static int mv_rows(void) { return ngroups + R_GROUP; }
 static int mv_shown(void) { int n = (FB_H - 120 - MV_TOP - MV_BOTTOM) / MV_STEP; return n < mv_rows() ? n : mv_rows(); }
+static int mv_cur(void) { return cores[mv_core].group[0] ? group_find(cores[mv_core].group) + R_GROUP : R_NONE; }
 
-static void mv_label(int row, char *b) {
-  if (row == 0) str_cpy(b, "No group");
-  else if (row <= ngroups) str_cpy(b, group_names[row - 1]);
-  else if (mv_edit) str_cpy(str_cpy(b, mv_name), "_");
-  else str_cpy(b, "New group...");
+// a chevron 2 px wide: up (dir -1) or down (dir 1), its tip at (cx, cy + dir * 4)
+static void chevron(int cx, int cy, int dir, ramp_t r) {
+  int ty = cy + dir * 4;
+  gfx_hand(cx, ty, 9, dir < 0 ? 135 : 45, r);
+  gfx_hand(cx, ty, 9, dir < 0 ? 225 : 315, r);
 }
 
 static void draw_move(void) {
@@ -424,18 +435,41 @@ static void draw_move(void) {
   ft_rect(x, y, MV_W, h, 8, look.button, (int32_t) look.active);
   str_cpy(str_cpy(b, "Move "), cores[mv_core].name);
   gfx_text_center(&f27, x + MV_W / 2, y + 28, b, gfx_ramp_over(look.text, look.button));
-  int cur = cores[mv_core].group[0] ? group_find(cores[mv_core].group) + 1 : 0;
+  int cur = mv_cur(), rx = x + 28, rw = MV_W - 56;
   for (int k = 0; k < mv_shown(); k++) {
-    int row = mv_first + k, ry = y + MV_TOP + k * MV_STEP, rx = x + 24, rw = MV_W - 48;
+    int row = mv_first + k, ry = y + MV_TOP + k * MV_STEP, cy = ry + TAB_H / 2;
     int on = row == mv_row;
     if (hit_add(rx, ry, rw, TAB_H, HIT_MV + row) && !on) ft_rect(rx, ry, rw, TAB_H, 2, look.active, (int32_t) look.button);
     if (on) gfx_round_rect(rx, ry, rw, TAB_H, 4, gfx_ramp(look.active, (int32_t) look.button));
     uint32_t bg = on ? look.active : look.button;
-    if (row == cur) gfx_circle(rx + 9, ry + TAB_H / 2, 3, gfx_ramp_over(on ? look.text_active : look.active, bg));   // the group now
-    mv_label(row, b);
-    gfx_text_center(&f27, rx + rw / 2, ry + TAB_H / 2, b, gfx_ramp_over(on ? look.text_active : look.text, bg));
+    ramp_t t = gfx_ramp_over(on ? look.text_active : look.text, bg);
+    if (row == R_NEW && mv_edit) {
+      // the name typed: a field on the row, the cursor after the text
+      int fx = rx + 30, fw = rw - 38;
+      gfx_round_rect(fx, ry + 3, fw, TAB_H - 6, 3, gfx_ramp(look.bg, (int32_t) bg));
+      ramp_t ft = gfx_ramp_over(look.text, look.bg);
+      gfx_text_left(&f27, fx + 8, cy, mv_name, ft);
+      int cx = fx + 9 + gfx_text_width(&f27, mv_name);
+      gfx_fill(cx, ry + 8, 2, TAB_H - 16, gfx_color(CURSOR_COLOR));
+    } else if (row == R_NEW) gfx_text_center(&f27, rx + rw / 2, cy, "New group", t);
+    else gfx_text_center(&f27, rx + rw / 2, cy, row == R_NONE ? "No group" : group_names[row - R_GROUP], t);
+    if (row == R_NEW) {          // a plus on the left
+      gfx_hand(rx + 16, cy, 7, 90, t); gfx_hand(rx + 16, cy, 7, 270, t);
+      gfx_hand(rx + 16, cy, 7, 0, t); gfx_hand(rx + 16, cy, 7, 180, t);
+    }
+    if (row == cur) gfx_circle(rx + 16, cy, 3, gfx_ramp_over(on ? look.text_active : look.active, bg));   // the group now
   }
-  const char *keys = mv_edit ? "Type the name   Enter: OK   Esc: back" : "Up/Down: group   Enter: move   Esc: cancel";
+  // more rows above / below: chevrons on the right of the first / last row (a click scrolls)
+  ramp_t ch = gfx_ramp_over(look.text, look.button);
+  int cx = x + MV_W - 14;
+  if (mv_first > 0) { hit_add(cx - 12, y + MV_TOP, 24, TAB_H, HIT_MV_UP); chevron(cx, y + MV_TOP + TAB_H / 2, -1, ch); }
+  if (mv_first + mv_shown() < mv_rows()) {
+    int ly = y + MV_TOP + (mv_shown() - 1) * MV_STEP;
+    hit_add(cx - 12, ly, 24, TAB_H, HIT_MV_DOWN);
+    chevron(cx, ly + TAB_H / 2, 1, ch);
+  }
+  const char *keys = mv_edit ? "Type a name   Enter: create   Esc: back" :
+                     mv_row == R_NEW ? "Enter: a new group   Esc: cancel" : "Up/Down: group   Enter: move   Esc: cancel";
   gfx_text_center(&f27, x + MV_W / 2, y + h - 22, keys, gfx_ramp_over(look.copyright, look.button));
 }
 
@@ -444,8 +478,9 @@ static void mv_open(int i) {
   stop_autoload();
   mv_core = vis[i];
   mv_edit = 0;
-  mv_row = cores[mv_core].group[0] ? group_find(cores[mv_core].group) + 1 : 0;
+  mv_row = mv_cur();
   mv_first = 0;
+  if (mv_row >= mv_shown()) mv_first = mv_row - mv_shown() + 1;
   ui_click();
   draw_all();
 }
@@ -459,23 +494,29 @@ static void mv_apply(const char *name) {
   mv_close();
 }
 
+static void mv_scroll(int first) {
+  if (first > mv_rows() - mv_shown()) first = mv_rows() - mv_shown();
+  if (first < 0) first = 0;
+  mv_first = first;
+}
+
 static void mv_move(int row) {
   if (row < 0) row = 0;
   if (row >= mv_rows()) row = mv_rows() - 1;
-  if (row == mv_row) return;
+  if (row == mv_row && !mv_edit) return;
   mv_row = row;
   mv_edit = 0;
-  if (mv_row < mv_first) mv_first = mv_row;
-  if (mv_row >= mv_first + mv_shown()) mv_first = mv_row - mv_shown() + 1;
+  if (mv_row < mv_first) mv_scroll(mv_row);
+  if (mv_row >= mv_first + mv_shown()) mv_scroll(mv_row - mv_shown() + 1);
   ui_click();
   draw_all();
 }
 
 static void mv_enter(void) {
-  if (mv_row == 0) mv_apply("");
-  else if (mv_row <= ngroups) mv_apply(group_names[mv_row - 1]);
+  if (mv_row == R_NONE) mv_apply("");
+  else if (mv_row >= R_GROUP) mv_apply(group_names[mv_row - R_GROUP]);
   else if (!mv_edit) { mv_edit = 1; mv_name[0] = 0; ui_click(); draw_all(); }
-  else if (mv_name[0] && mv_name[0] != ' ') mv_apply(mv_name);
+  else if (mv_name[0]) mv_apply(mv_name);
 }
 
 static void mv_key(const key_ev_t *e) {
@@ -489,14 +530,16 @@ static void mv_key(const key_ev_t *e) {
              e->ch != '#' && n < GROUP_LEN && (n || e->ch != ' ')) {
       mv_name[n] = e->ch; mv_name[n + 1] = 0; ui_click(); draw_all();
     }
-    else if (e->key == K_UP || e->key == K_DOWN) { mv_edit = 0; mv_move(mv_row + (e->key == K_UP ? -1 : 1)); draw_all(); }
+    else if (e->key == K_DOWN) mv_move(mv_row + 1);
     return;
   }
   switch (e->key) {
     case K_UP: mv_move(mv_row - 1); break;
     case K_DOWN: mv_move(mv_row + 1); break;
-    case K_HOME: case K_PGUP: mv_move(0); break;
-    case K_END: case K_PGDN: mv_move(mv_rows() - 1); break;
+    case K_PGUP: mv_move(mv_row - mv_shown()); break;
+    case K_PGDN: mv_move(mv_row + mv_shown()); break;
+    case K_HOME: mv_move(0); break;
+    case K_END: mv_move(mv_rows() - 1); break;
     case K_ENTER: mv_enter(); break;
     case K_ESC: case K_BKSP: ui_click(); mv_close(); break;
     default: if (e->ch == 'g' || e->ch == 'G') { ui_click(); mv_close(); }
@@ -506,9 +549,18 @@ static void mv_key(const key_ev_t *e) {
 static void mv_mouse(int ev) {
   int h = ptr.visible ? hit_at(ptr.x, ptr.y) : HIT_NONE;
   if (ev & M_RIGHT) { ui_click(); mv_close(); return; }
+  if ((ev & M_LEFT) && (h == HIT_MV_UP || h == HIT_MV_DOWN)) {
+    mv_scroll(mv_first + (h == HIT_MV_UP ? -1 : 1));
+    if (mv_row < mv_first) mv_row = mv_first;
+    if (mv_row >= mv_first + mv_shown()) mv_row = mv_first + mv_shown() - 1;
+    if (mv_row != R_NEW) mv_edit = 0;
+    ui_click();
+    draw_all();
+    return;
+  }
   if ((ev & M_LEFT) && h >= HIT_MV) {
     int row = h - HIT_MV;
-    if (row != mv_row) { mv_row = row; if (!(row == mv_rows() - 1)) mv_edit = 0; }
+    if (row != mv_row) { mv_row = row; mv_edit = 0; }
     mv_enter();
     return;
   }

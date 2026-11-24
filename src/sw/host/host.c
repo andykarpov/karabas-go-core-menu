@@ -247,9 +247,10 @@ int main(int argc, char **argv) {
   keys("x");                                     dump("00m_group_closed");
   // a core moved (G): into a new group (alone in it: shown at the top), then back to Computers
   keys("e");  type("g");                         dump("00n_move");
-  key(K_END); keys("e"); type("Fav");            dump("00o_move_new");
+  key(K_HOME);                                   dump("00n2_move_new_row");
+  keys("e"); type("Fav");                        dump("00o_move_new");
   keys("e");                                     dump("00p_moved");
-  type("g"); key(K_HOME); keys("ddd");           dump("00q_move_back");
+  type("g"); key(K_HOME); keys("dddd");           dump("00q_move_back");
   keys("e");                                     dump("00r_moved_back");
   keys("x"); key(K_HOME);
   keys("l");                                     dump("00b_setup_focus");   // Left on the first core

@@ -225,19 +225,21 @@ script), Analogue Pocket (`category` of `platform.json`, set by the author). Cho
 - The group of a core, the first found: `[groups] <id> = <group>` of karabas.ini (the user; an
   empty value = no group), then the `group` of the core (later, step 2), then the table of the menu
   (`src/sw/groups.c`, by the id, for the cores of today and the ones of other authors). Unknown: no group.
-- The groups (English): ZX Spectrum, USSR, Computers, Consoles, Games, Utilities (this order, then
+- The groups (English): ZX Spectrum, exUSSR, Computers, Consoles, Games, Utilities (this order, then
   the groups of the user by name). The table (2026-11-24):
   ZX Spectrum: tsconf, baseconf, profi, zxnext, zxuno, spec256, quadspeccy, quadspeccyx4, sprinter,
-  alf, p4096; USSR: bk, uknc, vector06c, orion128, orionpro, specialist, rk, pdp2026, criss;
+  alf, p4096; exUSSR: bk, uknc, vector06c, orion128, orionpro, specialist, rk, pdp2026, criss;
   Computers: apple2, atari800, atarist, archie, bbc, c64, cpc, macplus, msx, msx2, nanomig, ql, vic20,
   agon, gigatron, next186, pcxt, rc2014, v6z80p; Consoles: atari2600, nes, snes, sega, wonderswan,
   uzebox, pong; Games: doom, heretic, hexen; Utilities: boardtest, term, vt100, musicplayer.
 - The list: the groups first (a button with the count of its cores), then the cores of no group; a
-  group of one core shows that core instead. Enter opens a group; in it the first button is
-  "< <group>" (back), Esc too. The cores inside are in the order of `[setup] core_sort`. At the start
+  group of one core shows that core instead. Enter opens a group; in it the first button is the
+  group name with a back arrow in the place of the folder (back), Esc too. The cores inside are in the order of `[setup] core_sort`. At the start
   the group of the autoload / last core is open, that core selected.
-- A core moved: G (or the right mouse button) on a core: a list of No group, the groups, New
-  group... (a name typed, 20 chars at most); written at once by CFG SET `[groups] <id>`.
+- A core moved: G (or the right mouse button) on a core: a list of + New group (a field for the
+  name, 20 chars at most), No group, the groups (the one of the core marked; more than fit scroll,
+  chevrons on the right); written at once by CFG SET `[groups] <id>`. A group exists while a core
+  is in it: a new one is made by moving a core into it. No move from a gamepad (user).
 - Setup > System > Core groups On / Off (`[setup] core_groups`, default On): Off is the flat list
   of before.
 - Steps: (1) the menu: the table, `[groups]`, the list, the move, the setting (the firmware as it
