@@ -53,6 +53,7 @@ master before it.
 | Ф3 | Setup on the CPU: Settings (CFG), RTC, Wi-Fi (ESP direct), Map USB gamepad (HID learn over RPC), About, autoload | UI approval, hw on Mini G |
 | Ф4 | The boot UI removed from the firmware; Go and Mini builds; **release of the minimal version** | sims, the three boards, one PR per repo |
 | Ф5 | Later iterations: two-panel file manager (copy / move / delete between the cards, see below), RPC FS (generic, sandboxed) + the guide for other cores | UI approval, hw |
+| Ф6 | Core groups (see below): one level of groups in the core list, the defaults of the menu, `[groups]` of karabas.ini, a core moved to another group; later the `group` key of `core.json` (kgo2), Recent / Favorites | UI approval, hw |
 
 ## Ф4: what leaves the firmware (user, 2026-11-21: the FT812 menu is not needed any more)
 
@@ -212,6 +213,49 @@ The firmware loaded 530 KB of ROMs after the bitstream (menu.bin 218 KB, sounds.
 - The character picture is in runs (char_rle, 16000 -> 5129 bytes).
 - The firmware shows no ROM loading screen for the boot core (karabas-go-firmware #171).
 
+## Ф6: core groups (user, 2026-11-24)
+
+Status: step 1 RELEASED 2026-11-24 (boot.kg 26112402; the look approved by the user on the frames
+and on the Mini G). Steps 2-4 are in the backlog (Open items, user 2026-11-24: step 1 is enough for now).
+
+The core list gets one level of groups (no groups in groups). Studied: MiST (subfolders of the SD
+with the system attribute), MiSTer (`_` folders, `names.txt`, `.mgl` shortcuts, `_@Favorites` of a
+script), Analogue Pocket (`category` of `platform.json`, set by the author). Chosen:
+
+- No folders on the card: the `.kg` stay in its root (the file name of 32 chars in `LAUNCH`,
+  `[autoload]`, `AT+KARABAS=load`, the flat release `karabas-go/cores`, users copying the files over
+  the old ones). The group is a name of the core, not a place.
+- The group of a core, the first found: `[groups] <id> = <group>` of karabas.ini (the user; an
+  empty value = no group), then the `group` of the core (later, step 2), then the table of the menu
+  (`src/sw/groups.c`, by the id, for the cores of today and the ones of other authors). Unknown: no group.
+- The groups (English): ZX Spectrum, exUSSR, Computers, Consoles, Games, Utilities; in the list
+  ZX Spectrum goes first, all the others (the user's too) by name (user). The table (2026-11-24):
+  ZX Spectrum: tsconf, baseconf, profi, zxnext, zxuno, spec256, quadspeccy, quadspeccyx4, sprinter,
+  alf, p4096; exUSSR: bk, uknc, vector06c, orion128, orionpro, specialist, rk, pdp2026, criss;
+  Computers: apple2, atari800, atarist, archie, bbc, c64, cpc, macplus, msx, msx2, nanomig, ql, vic20,
+  agon, gigatron, next186, pcxt, rc2014, v6z80p; Consoles: atari2600, nes, snes, sega, wonderswan,
+  uzebox, pong; Games: doom, heretic, hexen; Utilities: boardtest, term, vt100, musicplayer.
+- The list: the groups first (a button with the count of its cores), then the cores of no group; a
+  group of one core shows that core instead. Enter opens a group; in it the first button is the
+  group name with a back arrow in the place of the folder (back), Esc too. The cores inside are in the order of `[setup] core_sort`. At the start
+  the group of the autoload / last core is open, that core selected.
+- A core moved: G (or the right mouse button) on a core: a list of + New group (a field for the
+  name, 20 chars at most), No group, the groups (the one of the core marked; more than fit scroll,
+  chevrons on the right); written at once by CFG SET `[groups] <id>`. A group exists while a core
+  is in it: a new one is made by moving a core into it. No move from a gamepad (user).
+- The footer line of the autoload says, while there is no autoload countdown and the groups are on,
+  what the keys do on the entry selected: "G / right click: move to a group" on a core, "Enter: open
+  the group", "Enter / Esc: back" (user: the move was not found without it).
+- Setup > System > Core groups On / Off (`[setup] core_groups`, default On): Off is the flat list
+  of before.
+- Steps: (1) the menu: the table, `[groups]`, the list, the move, the setting (the firmware as it
+  is: CFG of any section); (2) `group` in `core.json` -> the CORE record of kgo2 (make_core of
+  tools), the firmware gives it in `CORES ITEM` as a 6th field (an old menu reads 5); (3) the key in
+  the `core.json` of the cores at their next builds; (4) Recent (the last N started) and Favorites
+  (`[favorites]`), groups of their own.
+
 ## Open items
 
+- Backlog of Ф6 (core groups, later): `group` in `core.json` -> the CORE record of kgo2 (make_core of
+  tools), `CORES ITEM` 6th field in the firmware, the key in the cores at their builds; Recent / Favorites.
 - FS sandbox for other cores: a `core.json` key with the allowed roots (tools `make_core`).

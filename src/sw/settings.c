@@ -25,6 +25,7 @@ const setting_t settings[S_COUNT] = {
   B("Debug log",      "Log to the USB serial port",     "setup", "debug", 0),
   B("DVI only",       "No HDMI audio, next core",       "setup", "dvi_only", 0),
   C("Core sort",      "The order of the core list",     "setup", "core_sort", core_sorts, 1, 0),
+  B("Core groups",    "G or right click: move a core",  "setup", "core_groups", 1),
   B("LED matrix",     "The dot matrix add-on",          "matrix", "enabled", 1),
   N("Matrix bright.", "Core: as the core sets it",      "matrix", "brightness", 17, 0, 0),
   { "Matrix effects", "The clock and the audio meters", 0, 0, SK_PAGE, 0, 0, 0, 0, 0 },

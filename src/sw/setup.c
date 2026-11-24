@@ -22,7 +22,7 @@ enum { HIT_TAB = 100, HIT_ROW = 200, HIT_TOGGLE = 300, HIT_LESS = 400, HIT_MORE 
        HIT_CHAN = 600, HIT_SLIDER = 700, HIT_DLG_LEFT = 800, HIT_DLG_RIGHT, HIT_PANEL = 900 };
 
 typedef struct { const char *name; const uint8_t *ids; uint8_t len; } page_t;
-static const uint8_t page_system[] = { S_DEBUG, S_DVI, S_CORE_SORT, S_MATRIX, S_MATRIX_BRIGHT, S_MX_EFFECTS };
+static const uint8_t page_system[] = { S_DEBUG, S_DVI, S_CORE_SORT, S_GROUPS, S_MATRIX, S_MATRIX_BRIGHT, S_MX_EFFECTS };
 static const uint8_t page_autoload[] = { S_AUTOLOAD, S_TIMEOUT, S_CORE };
 static const uint8_t page_display[] = { S_VIDEO, S_TIME, S_DATE, S_CHAR, S_MOUSE };
 static const uint8_t page_sound[] = { S_SOUND, S_CLICK };
