@@ -417,7 +417,7 @@ static char mv_name[GROUP_LEN + 1];
 #define MV_STEP 36
 #define MV_TOP 56                // the title
 #define MV_BOTTOM 44             // the keys
-#define MV_Y_MIN 88              // the clock ends at line 84 (draw_clock), the frame of the dialog is 3 px
+#define MV_Y_MIN 96              // the clock clears lines 8..83 (draw_clock); the frame of the dialog is 3 + 8 px above y (ft_rect)
 #define HIT_MV 2000
 #define HIT_MV_UP 1998
 #define HIT_MV_DOWN 1999
