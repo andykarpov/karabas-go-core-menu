@@ -417,6 +417,7 @@ static char mv_name[GROUP_LEN + 1];
 #define MV_STEP 36
 #define MV_TOP 56                // the title
 #define MV_BOTTOM 44             // the keys
+#define MV_Y_MIN 96              // the clock clears lines 8..83 (draw_clock); the frame of the dialog is 3 + 8 px above y (ft_rect)
 #define HIT_MV 2000
 #define HIT_MV_UP 1998
 #define HIT_MV_DOWN 1999
@@ -433,6 +434,7 @@ static void chevron(int cx, int cy, int dir, ramp_t r) {
 
 static void draw_move(void) {
   int h = MV_TOP + mv_shown() * MV_STEP + MV_BOTTOM, x = (FB_W - MV_W) / 2, y = (FB_H - h) / 2;
+  if (y < MV_Y_MIN) y = MV_Y_MIN;   // below the clock: its tick clears its place in the shown buffer
   char b[48];
   hit_clear();
   ft_rect(x - 3, y - 3, MV_W + 6, h + 6, 8, look.active, GFX_ALPHA);
@@ -443,7 +445,11 @@ static void draw_move(void) {
   for (int k = 0; k < mv_shown(); k++) {
     int row = mv_first + k, ry = y + MV_TOP + k * MV_STEP, cy = ry + TAB_H / 2;
     int on = row == mv_row;
-    if (hit_add(rx, ry, rw, TAB_H, HIT_MV + row) && !on) ft_rect(rx, ry, rw, TAB_H, 2, look.active, (int32_t) look.button);
+    // hovered: a frame of 2 px in the active colour, its middle in the colour of the dialog (the text is drawn for it)
+    if (hit_add(rx, ry, rw, TAB_H, HIT_MV + row) && !on) {
+      ft_rect(rx, ry, rw, TAB_H, 2, look.active, (int32_t) look.button);
+      gfx_round_rect(rx, ry, rw, TAB_H, 4, gfx_ramp(look.button, (int32_t) look.active));
+    }
     if (on) gfx_round_rect(rx, ry, rw, TAB_H, 4, gfx_ramp(look.active, (int32_t) look.button));
     uint32_t bg = on ? look.active : look.button;
     ramp_t t = gfx_ramp_over(on ? look.text_active : look.text, bg);

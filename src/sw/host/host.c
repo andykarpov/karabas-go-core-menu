@@ -247,6 +247,8 @@ int main(int argc, char **argv) {
   keys("x");                                     dump("00m_group_closed");
   // a core moved (G): into a new group (alone in it: shown at the top), then back to Computers
   keys("e");  type("g");                         dump("00n_move");
+  ptr.visible = 1; ptr.x = scr_w / 2; ptr.y = scr_h / 2 + 66; browser_mouse(M_MOVED); dump("00n1_move_hover");
+  ptr.visible = 0; browser_mouse(M_MOVED);
   key(K_HOME);                                   dump("00n2_move_new_row");
   keys("e"); type("Fav");                        dump("00o_move_new");
   keys("e");                                     dump("00p_moved");
