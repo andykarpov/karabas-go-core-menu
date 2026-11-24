@@ -195,13 +195,17 @@ static void draw_arrow(int next) {
 static void draw_footer(void) {
   char b[48], *p;
   ramp_t copy = gfx_ramp_alpha(look.copyright);
-  gfx_clear(FB_W / 2 - 124, FB_H - 56, 248, 52);   // the pager and the autoload line, not the build on the left
+  gfx_clear(FB_W / 2 - 124, FB_H - 56, 248, 52);   // the pager and the autoload / hint line, not the build on the left
   p = str_cpy(b, "Page "); p = u2s(p, page_of(sel) + 1, 1); p = str_cpy(p, " of "); u2s(p, pages(), 1);
   gfx_text_center(&f27, FB_W / 2, FB_H - 40, b, copy);
   draw_arrow(0);
   draw_arrow(1);
   if (autoload_left >= 0) { p = str_cpy(b, "Autoloading core in "); p = u2s(p, autoload_left, 1); str_cpy(p, " s"); }
-  else str_cpy(b, "Autoload disabled");
+  // no autoload: with the groups, what the keys do on the entry selected (the move is not seen elsewhere)
+  else if (!grouped() || !nvis) str_cpy(b, "Autoload disabled");
+  else if (vis[sel] >= 0) str_cpy(b, "G / right click: move to a group");
+  else if (vis[sel] == E_BACK) str_cpy(b, "Enter / Esc: back");
+  else str_cpy(b, "Enter: open the group");
   gfx_text_center(&f27, FB_W / 2, FB_H - 20, b, copy);
 }
 

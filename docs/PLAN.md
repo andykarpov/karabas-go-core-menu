@@ -240,6 +240,9 @@ script), Analogue Pocket (`category` of `platform.json`, set by the author). Cho
   name, 20 chars at most), No group, the groups (the one of the core marked; more than fit scroll,
   chevrons on the right); written at once by CFG SET `[groups] <id>`. A group exists while a core
   is in it: a new one is made by moving a core into it. No move from a gamepad (user).
+- The footer line of the autoload says, while there is no autoload countdown and the groups are on,
+  what the keys do on the entry selected: "G / right click: move to a group" on a core, "Enter: open
+  the group", "Enter / Esc: back" (user: the move was not found without it).
 - Setup > System > Core groups On / Off (`[setup] core_groups`, default On): Off is the flat list
   of before.
 - Steps: (1) the menu: the table, `[groups]`, the list, the move, the setting (the firmware as it
