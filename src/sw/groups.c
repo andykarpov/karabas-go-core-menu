@@ -9,9 +9,8 @@ int ngroups = 0;
 static int8_t core_group[MAX_CORES];
 static uint8_t buf[RPC_MAX];
 
-// the groups of the table, in the order of the list; the groups of the user come after them, by name
+// the groups of the table; in the list ZX Spectrum goes first, the others (the user's too) by name
 static const char *const known[] = { "ZX Spectrum", "exUSSR", "Computers", "Consoles", "Games", "Utilities" };
-#define KNOWN ((int) (sizeof(known) / sizeof(known[0])))
 
 // the cores of today by their id (docs/PLAN.md Ф6, 2026-11-24); later the `group` of core.json comes first
 static const struct { const char *id; uint8_t g; } table[] = {
@@ -73,10 +72,7 @@ void groups_read(void) {
   groups_build();
 }
 
-static int rank(const char *name) {
-  for (int i = 0; i < KNOWN; i++) if (str_ieq(known[i], name)) return i;
-  return KNOWN;
-}
+static int rank(const char *name) { return str_ieq(name, known[0]) ? 0 : 1; }
 
 static int name_cmp(const char *a, const char *b) {
   for (;; a++, b++) {

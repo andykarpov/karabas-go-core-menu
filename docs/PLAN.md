@@ -225,8 +225,8 @@ script), Analogue Pocket (`category` of `platform.json`, set by the author). Cho
 - The group of a core, the first found: `[groups] <id> = <group>` of karabas.ini (the user; an
   empty value = no group), then the `group` of the core (later, step 2), then the table of the menu
   (`src/sw/groups.c`, by the id, for the cores of today and the ones of other authors). Unknown: no group.
-- The groups (English): ZX Spectrum, exUSSR, Computers, Consoles, Games, Utilities (this order, then
-  the groups of the user by name). The table (2026-11-24):
+- The groups (English): ZX Spectrum, exUSSR, Computers, Consoles, Games, Utilities; in the list
+  ZX Spectrum goes first, all the others (the user's too) by name (user). The table (2026-11-24):
   ZX Spectrum: tsconf, baseconf, profi, zxnext, zxuno, spec256, quadspeccy, quadspeccyx4, sprinter,
   alf, p4096; exUSSR: bk, uknc, vector06c, orion128, orionpro, specialist, rk, pdp2026, criss;
   Computers: apple2, atari800, atarist, archie, bbc, c64, cpc, macplus, msx, msx2, nanomig, ql, vic20,

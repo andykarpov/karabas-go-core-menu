@@ -242,7 +242,7 @@ int main(int argc, char **argv) {
     ptr.x = 700; ptr.y = 300; browser_mouse(M_MOVED); ptr.visible = 0; browser_mouse(M_MOVED);
   }
   // the groups: Computers open, its next page, back to the top
-  keys("dde");                                   dump("00k_group_open");
+  keys("de");                                    dump("00k_group_open");
   keys("r");                                     dump("00l_group_page2");
   keys("x");                                     dump("00m_group_closed");
   // a core moved (G): into a new group (alone in it: shown at the top), then back to Computers
@@ -250,7 +250,7 @@ int main(int argc, char **argv) {
   key(K_HOME);                                   dump("00n2_move_new_row");
   keys("e"); type("Fav");                        dump("00o_move_new");
   keys("e");                                     dump("00p_moved");
-  type("g"); key(K_HOME); keys("dddd");           dump("00q_move_back");
+  type("g"); key(K_HOME); keys("ddd");           dump("00q_move_back");
   keys("e");                                     dump("00r_moved_back");
   keys("x"); key(K_HOME);
   keys("l");                                     dump("00b_setup_focus");   // Left on the first core
