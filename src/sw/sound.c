@@ -2,7 +2,14 @@
 #include "sound.h"
 #include "mmio.h"
 
+#ifdef HOST
+void host_midi(const uint8_t *msg, int len);   // host/host.c: kept with its time for a .mid file
+#endif
+
 void midi_send(const uint8_t *msg, int len) {
+#ifdef HOST
+  host_midi(msg, len);
+#endif
   for (int i = 0; i < len; i++) {
     while (R_MIDI & 1) ;                              // the fifo is full
     R_MIDI = msg[i];

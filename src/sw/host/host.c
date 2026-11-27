@@ -16,16 +16,18 @@
 #include "../cores.h"
 #include "../browser.h"
 #include "../setup.h"
+#include "../intro.h"
 
 uint8_t host_fb[2][0x80000];
 static uint32_t regs[0x1000];
 static uint32_t now_ms = 1000;
+static int host_intro = 0;       // argv[2] "intro": the boot intro frame by frame (host_vsync), its MIDI
 static int learn_calls = 0;
 void host_puts(const char *s) { fputs(s, stdout); }
 
 volatile uint32_t *host_reg(uint32_t off) {
   static uint32_t tmp;
-  if (off == 0x1c) { tmp = now_ms++; return &tmp; }
+  if (off == 0x1c) { tmp = host_intro ? now_ms : now_ms++; return &tmp; }   // the intro: the time of its frame
   if (off == 0x40) { tmp = now_ms * 1000; return &tmp; }
   if (off >= 0x2000 || off == 0xa0) { tmp = 0; return &tmp; }   // RPC; MIDI: never full
   return &regs[off / 4];
@@ -182,6 +184,39 @@ static void dump(const char *name) {
   printf("frame %s\n", name);
 }
 
+// ---- the boot intro: a frame a vsync (60 Hz), the MIDI kept with the time -> intro.mid ----
+static int intro_frame = 0;
+static uint32_t intro_t0;
+void host_vsync(void) {
+  char n[32];
+  snprintf(n, sizeof(n), "f%04d", intro_frame++);
+  dump(n);
+  now_ms = intro_t0 + (uint32_t) (intro_frame * 50 / 3);
+}
+static uint8_t mid[65536];
+static int mid_n = 0;
+static uint32_t mid_last = 0;
+void host_midi(const uint8_t *msg, int len) {
+  if (!host_intro || mid_n > (int) sizeof(mid) - 16) return;
+  uint32_t d = now_ms - mid_last, v = d & 0x7F;   // ticks = ms (division 500, 120 bpm)
+  mid_last = now_ms;
+  while (d >>= 7) v = (v << 8) | 0x80 | (d & 0x7F);
+  for (;;) { mid[mid_n++] = (uint8_t) v; if (v & 0x80) v >>= 8; else break; }
+  for (int i = 0; i < len; i++) mid[mid_n++] = msg[i];
+}
+static void midi_write(const char *path) {
+  FILE *o = fopen(path, "wb");
+  int n = mid_n + 4;
+  const uint8_t hdr[] = { 'M','T','h','d', 0,0,0,6, 0,0, 0,1, 0x01,0xF4, 'M','T','r','k' };
+  fwrite(hdr, 1, sizeof(hdr), o);
+  uint8_t l[4] = { (uint8_t) (n >> 24), (uint8_t) (n >> 16), (uint8_t) (n >> 8), (uint8_t) n };
+  fwrite(l, 1, 4, o);
+  fwrite(mid, 1, mid_n, o);
+  const uint8_t eot[] = { 0, 0xFF, 0x2F, 0 };
+  fwrite(eot, 1, 4, o);
+  fclose(o);
+}
+
 static void key(uint8_t k) { key_ev_t e = { 0 }; e.key = k; if (setup_active) setup_key(&e); else browser_key(&e); }
 static void keys(const char *s) {   // a script: u d l r e x(esc) t(tab) b(bksp) s, digits
   for (; *s; s++) {
@@ -215,6 +250,19 @@ int main(int argc, char **argv) {
   cores_read();
   video_set(set_val[S_VIDEO]);
   printf("host: %d x %d\n", scr_w, scr_h);
+  if (argc > 2 && !strcmp(argv[2], "intro")) {
+    static char dir[64];
+    snprintf(dir, sizeof(dir), "host/out/intro%d", scr_w);
+    out_dir = dir;
+    alarm(120);
+    host_intro = 1; intro_t0 = now_ms; mid_last = now_ms;
+    intro_play();
+    host_intro = 0;
+    char mp[80]; snprintf(mp, sizeof(mp), "%s/intro.mid", dir); midi_write(mp);
+    browser_start(); browser_open(); dump("menu");
+    printf("host: intro %d frames\n", intro_frame);
+    return 0;
+  }
   browser_start();
   msc_mode = 1; browser_msc_draw();              dump("00a_msc"); msc_mode = 0;
   browser_open();                                dump("00_browser");
