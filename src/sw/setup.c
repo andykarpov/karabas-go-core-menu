@@ -24,7 +24,7 @@ enum { HIT_TAB = 100, HIT_ROW = 200, HIT_TOGGLE = 300, HIT_LESS = 400, HIT_MORE 
 typedef struct { const char *name; const uint8_t *ids; uint8_t len; } page_t;
 static const uint8_t page_system[] = { S_DEBUG, S_DVI, S_CORE_SORT, S_GROUPS, S_MATRIX, S_MATRIX_BRIGHT, S_MX_EFFECTS };
 static const uint8_t page_autoload[] = { S_AUTOLOAD, S_TIMEOUT, S_CORE };
-static const uint8_t page_display[] = { S_VIDEO, S_TIME, S_DATE, S_CHAR, S_MOUSE };
+static const uint8_t page_display[] = { S_VIDEO, S_TIME, S_DATE, S_CHAR, S_MOUSE, S_INTRO };
 static const uint8_t page_sound[] = { S_SOUND, S_CLICK };
 static const uint8_t page_theme[] = { S_THEME, S_C_BG, S_C_GRADIENT, S_C_BUTTON, S_C_ACTIVE, S_C_TEXT, S_C_TEXT_ACTIVE, S_C_COPYRIGHT };
 #define PAGE(name, ids) { name, ids, sizeof(ids) }

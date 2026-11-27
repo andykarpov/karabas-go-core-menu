@@ -2,4 +2,4 @@
 // FT812), f30 the clock (digits and signs only), f20 the small labels of the Gamepad page.
 #pragma once
 #include "font.h"
-extern const font_t f20, f27, f30;
+extern const font_t f20, f27, f30, f32;   // f32: the big title lines (a few characters, tools/mkfonts.py)

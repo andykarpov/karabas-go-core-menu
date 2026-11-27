@@ -13,6 +13,7 @@
 #include "mmio.h"
 #include "rpc.h"
 #include "sound.h"
+#include "show.h"
 
 core_t cores[MAX_CORES];
 int ncores = 0;
@@ -578,6 +579,7 @@ static void mv_mouse(int ev) {
 }
 
 void browser_key(const key_ev_t *e) {
+  if (!e->repeat && !e->pad && mv_core < 0 && show_key(e->key)) { show_play(show_year(), 0, 0); browser_open(); return; }
   pointer_hide();
   stop_autoload();
   if (mv_core >= 0) { mv_key(e); pointer_show(); return; }
@@ -645,6 +647,7 @@ void browser_tick(void) {
     }
   }
   if (R_MS - t_clock >= 1000) { t_clock = R_MS; pointer_hide(); draw_clock(); pointer_show(); }
+  if (show_tick()) browser_open();
 }
 
 // ---- the USB drive mode (MSC) ----

@@ -16,7 +16,7 @@ $(B)/%.o: %.c $(wildcard *.h) $(wildcard lib/*.h) | $(B)
 	$(CROSS)gcc $(CFLAGS) -c $< -o $@
 $(B)/%.o: %.S | $(B)
 	$(CROSS)gcc $(CFLAGS) -c $< -o $@
-SRCS   := main.c intro.c ui.c fonts.c settings.c browser.c groups.c setup.c rpc.c gfx.c sound.c syscalls.c esp.c wifi.c wifi_page.c pad_page.c esp_update.c ntp.c \
+SRCS   := main.c intro.c fx.c show.c ui.c fonts.c settings.c browser.c groups.c setup.c rpc.c gfx.c sound.c syscalls.c esp.c wifi.c wifi_page.c pad_page.c esp_update.c ntp.c \
           lib/esp_at_parse.c lib/time_zone.c lib/masked_input.c
 OBJS   := $(B)/crt0.o $(addprefix $(B)/,$(SRCS:.c=.o))
 $(B)/menu.elf: $(OBJS) link.ld

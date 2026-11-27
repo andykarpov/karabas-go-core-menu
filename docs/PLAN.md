@@ -266,15 +266,12 @@ or a click cuts it short. `src/sw/intro.c`; `src/sw/host/intro.sh [640|800] [boa
 and the MIDI as a video (fluidsynth: not the sound of the SAM2695).
 
 - User 2026-11-27 ("оставляем как есть"): at every start of the menu (no sign of the first start after
-  power-up: a core does not restart the menu by Ctrl+Alt+Backspace), the autoload counts after it;
-  `[ft812] intro=0` turns it off (no Setup item; tb_menu_soc runs with it). Tested on the board, not in
+  power-up), the autoload counts after it; Setup > Display > Boot animation (`[ft812] intro`, on by
+  default) turns it off (tb_menu_soc runs with intro=0). The parts are in `src/sw/fx.c`. Tested on the board, not in
   the SoC sim (the time of a frame on the CPU not measured there; the drawing is time driven).
 
 ## Open items
 
-- Easter egg: a New Year greeting on 2027-01-01 (user, 2026-11-27; to think over first): the text and
-  the pictures prepared ahead, shown by a hard hotkey for a check; the trigger (the date of the RTC /
-  NTP, the first start of the day, how long) is to be discussed with the user.
 - Backlog of Ф6 (core groups, later): `group` in `core.json` -> the CORE record of kgo2 (make_core of
   tools), `CORES ITEM` 6th field in the firmware, the key in the cores at their builds; Recent / Favorites.
 - FS sandbox for other cores: a `core.json` key with the allowed roots (tools `make_core`).
