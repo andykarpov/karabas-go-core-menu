@@ -4,4 +4,4 @@
 #pragma once
 
 int intro_play(void);            // after settings_read / cores_read / video_set; 1 if a key cut it short
-int intro_wanted(void);          // 0 with [ft812] intro=0 of karabas.ini
+int intro_wanted(void);          // Setup > Display > Boot animation ([ft812] intro)

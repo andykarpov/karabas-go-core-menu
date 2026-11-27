@@ -45,6 +45,7 @@ const setting_t settings[S_COUNT] = {
   B("Show date",      "The date under the clock",       "ft812", "date", 1),
   B("Character",      "The Karabas picture",            "ft812", "char", 1),
   N("Mouse speed",    "How fast the pointer moves",     "ft812", "mouse_speed", 5, 1, 2),   // def: the index (speed 3)
+  B("Boot animation", "The logo at every start",        "ft812", "intro", 1),
   B("Start sound",    "A melody when a core starts",    "ft812", "sound", 1),
   B("Key click",      "A click on every key",           "ft812", "click", 1),
   { "Theme",          "The colors of the menu",         0, 0, SK_CHOICE, 0, 0, 0, 0, 0 },

@@ -10,6 +10,7 @@
 #include "setup.h"
 #include "sound.h"
 #include "intro.h"
+#include "show.h"
 
 int main(void) {
   dbg_puts("menu: start\n");
@@ -25,7 +26,9 @@ int main(void) {
   else dbg_puts("menu: no RPC\n");
   video_set(set_val[S_VIDEO]);   // [ft812] video_mode (640 x 480 without it, the mode after the start)
   // the boot intro (intro.c) at every start of the menu, a key cuts it short; the autoload counts after it
-  if (rpc_enabled() && !msc_mode && intro_wanted()) intro_play();
+  int year;
+  if (rpc_enabled() && !msc_mode && show_today(&year)) show_play(year, 0, 1);
+  else if (rpc_enabled() && !msc_mode && intro_wanted()) intro_play();
   // the cards are USB drives of the PC: the msc screen of the FT812 menu, until the firmware reboots
   if (msc_mode) browser_msc();
   browser_start();

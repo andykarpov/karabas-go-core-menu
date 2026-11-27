@@ -10,7 +10,7 @@ d=host/out/intro$w
 mkdir -p "$d"
 rm -f "$d"/f*.ppm
 gcc -O1 -g -DHOST -DGFX_DEBUG_PUTS=host_puts -Wall -Wno-unused-function -I. -o host/out/menu_host \
-  -Ilib host/host.c intro.c ui.c settings.c browser.c groups.c setup.c gfx.c fonts.c sound.c esp.c wifi.c wifi_page.c pad_page.c esp_update.c ntp.c lib/esp_at_parse.c lib/time_zone.c lib/masked_input.c
+  -Ilib host/host.c intro.c fx.c show.c ui.c settings.c browser.c groups.c setup.c gfx.c fonts.c sound.c esp.c wifi.c wifi_page.c pad_page.c esp_update.c ntp.c lib/esp_at_parse.c lib/time_zone.c lib/masked_input.c
 HOST_BOARD=$board ./host/out/menu_host "$m" intro | grep -v '^frame f'
 sf=${SF2:-/usr/share/sounds/sf2/FluidR3_GM.sf2}
 fluidsynth -ni -q -F "$d/intro.wav" -r 48000 "$sf" "$d/intro.mid" >/dev/null 2>&1

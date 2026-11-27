@@ -17,6 +17,7 @@
 #include "../browser.h"
 #include "../setup.h"
 #include "../intro.h"
+#include "../show.h"
 
 uint8_t host_fb[2][0x80000];
 static uint32_t regs[0x1000];
@@ -159,13 +160,9 @@ int rpc_call(uint8_t svc, uint8_t fn, const void *in_, uint16_t in_len, void *ou
 
 // ---- the picture as menu_compose makes it ----
 static const char *out_dir = "host/out/640";
-static void dump(const char *name) {
+static void compose(FILE *o) {
   int b = regs[0x04 / 4] & 1, g_lines = scr_h * 3 / 4;
   uint32_t top = regs[0x18 / 4], bot = regs[0x20 / 4];
-  char path[256];
-  snprintf(path, sizeof(path), "%s/%s.ppm", out_dir, name);
-  FILE *o = fopen(path, "wb");
-  fprintf(o, "P6 %d %d 255\n", scr_w, scr_h);
   for (int y = 0; y < scr_h; y++) {
     int t = y >= g_lines ? 256 : y * 256 / g_lines;
     for (int x = 0; x < scr_w; x++) {
@@ -180,6 +177,13 @@ static void dump(const char *name) {
       }
     }
   }
+}
+static void dump(const char *name) {
+  char path[256];
+  snprintf(path, sizeof(path), "%s/%s.ppm", out_dir, name);
+  FILE *o = fopen(path, "wb");
+  fprintf(o, "P6 %d %d 255\n", scr_w, scr_h);
+  compose(o);
   fclose(o);
   printf("frame %s\n", name);
 }
@@ -187,10 +191,13 @@ static void dump(const char *name) {
 // ---- the boot intro: a frame a vsync (60 Hz), the MIDI kept with the time -> intro.mid ----
 static int intro_frame = 0;
 static uint32_t intro_t0;
+static FILE *frame_pipe;          // the show: the frames to ffmpeg (too many for files), every 30th a file too
 void host_vsync(void) {
   char n[32];
-  snprintf(n, sizeof(n), "f%04d", intro_frame++);
-  dump(n);
+  snprintf(n, sizeof(n), "f%04d", intro_frame);
+  if (frame_pipe) { compose(frame_pipe); if (intro_frame % 30 == 0) dump(n); }
+  else dump(n);
+  intro_frame++;
   now_ms = intro_t0 + (uint32_t) (intro_frame * 50 / 3);
 }
 static uint8_t mid[65536];
@@ -250,6 +257,21 @@ int main(int argc, char **argv) {
   cores_read();
   video_set(set_val[S_VIDEO]);
   printf("host: %d x %d\n", scr_w, scr_h);
+  if (argc > 2 && (!strcmp(argv[2], "show") || !strcmp(argv[2], "count"))) {
+    static char dir[64], cmd[256];
+    snprintf(dir, sizeof(dir), "host/out/show%d", scr_w);
+    out_dir = dir;
+    alarm(600);
+    snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 60 -i - -c:v libx264 -pix_fmt yuv420p -crf 16 %s/video.mp4", scr_w, scr_h, dir);
+    frame_pipe = popen(cmd, "w");
+    host_intro = 1; intro_t0 = now_ms; mid_last = now_ms;
+    show_play(2027, !strcmp(argv[2], "count") ? 5 : 0, 0);
+    host_intro = 0;
+    pclose(frame_pipe); frame_pipe = 0;
+    char mp[80]; snprintf(mp, sizeof(mp), "%s/show.mid", dir); midi_write(mp);
+    printf("host: show %d frames\n", intro_frame);
+    return 0;
+  }
   if (argc > 2 && !strcmp(argv[2], "intro")) {
     static char dir[64];
     snprintf(dir, sizeof(dir), "host/out/intro%d", scr_w);
