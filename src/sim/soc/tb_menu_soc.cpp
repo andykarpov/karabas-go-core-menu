@@ -194,12 +194,13 @@ static void serve() {
   else if (r.svc == 1 && r.fn == 0) {
     // CFG GET file, (section, key)...: per pair 1 + value, or 0 + "" (not there: the defaults of the
     // menu). TB_LOOK="key=value,key=value" gives keys of any section; [ft812] sound is 0 (1 s of the
-    // start sound is too long for the run) but in the TB_SOUND run
+    // start sound is too long for the run) but in the TB_SOUND run; [ft812] intro is 0
     std::vector<std::string> a;
     for (size_t p = 0; p < r.data.size(); p += strlen((const char *) r.data.data() + p) + 1) a.push_back((const char *) r.data.data() + p);
     const char *look = getenv("TB_LOOK");
     std::string l = std::string(",") + (look ? look : "") + ",";
     if (!getenv("TB_SOUND")) l += "sound=0,";
+    l += "intro=0,";                       // the boot intro (3.6 s) is too long for the runs
     for (size_t k = 1; k + 1 < a.size(); k += 2) {
       size_t at = l.find("," + a[k + 1] + "=");
       if (at == std::string::npos) { out.push_back(0); out.push_back(0); continue; }
