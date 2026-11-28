@@ -89,14 +89,27 @@ void hover_frame(int x, int y, int w, int h) {
 void marker(int x, int y, int h, uint32_t surface) {
   gfx_circle(x + 9, y + h / 2, 3, gfx_ramp_over(look.active, surface));
 }
+// the groove of a toggle (off) and a slider: the button colour lowered, darker (40 %), or lighter
+// (30 % to white) when the button is near black, so that it shows on a row of the button colour too
+static uint32_t groove(void) {
+  uint32_t c = look.button, out = 0;
+  int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+  int lower = (2 * r + 5 * g + b) / 8 >= 40;
+  for (int sh = 0; sh <= 16; sh += 8) {
+    int v = (c >> sh) & 255;
+    v = lower ? v * 6 / 10 : v + (255 - v) * 3 / 10;
+    out |= (uint32_t) v << sh;
+  }
+  return out;
+}
 static void toggle(int x, int cy, int w, int on, int32_t surface) {
-  uint32_t bar = on ? look.active : look.copyright;
+  uint32_t bar = on ? look.active : groove();
   gfx_pill(x, x + w, cy, 12, gfx_ramp(bar, surface));
   gfx_circle(on ? x + w : x, cy, 11, gfx_ramp_over(look.text, bar));
 }
 static void slider(int x, int cy, int w, uint32_t fill, int v, int range, int32_t surface) {
   int kx = x + v * w / range;
-  gfx_pill(x, x + w, cy, 5, gfx_ramp(look.copyright, surface));
+  gfx_pill(x, x + w, cy, 5, gfx_ramp(groove(), surface));
   if (kx > x) gfx_pill(x, kx, cy, 5, gfx_ramp(fill, surface));
   gfx_circle(kx, cy, 10, gfx_ramp(look.text, surface));
 }
