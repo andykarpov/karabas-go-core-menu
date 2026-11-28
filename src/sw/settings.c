@@ -2,6 +2,7 @@
 #include "settings.h"
 #include "ui.h"
 #include "rpc.h"
+#include "mmio.h"
 #include "cores.h"
 
 static const char *const core_sorts[] = { "Name", "File name", "Order" };
@@ -85,7 +86,7 @@ static uint8_t buf[RPC_MAX];
 
 // GET of several values: the pairs of settings[from..] that fit a request; their values (1 + value,
 // or 0 + "" when not in the file) into vals; returns the next id, -1 on an error
-static int cfg_get_many(int from, char vals[][40]) {
+static int cfg_get_many(int from, char vals[][40], uint32_t timeout_ms) {
   char req[RPC_MAX], *p = req;
   int id = from;
   p = str_cpy(p, "0") + 1;
@@ -97,7 +98,19 @@ static int cfg_get_many(int from, char vals[][40]) {
     p = str_cpy(p, s->section) + 1; p = str_cpy(p, s->key) + 1;
   }
   uint16_t n;
-  if (rpc_call(RPC_CFG, 0, req, (uint16_t) (p - req), buf, sizeof(buf), &n, 2000) != RPC_OK) return -1;
+  int st = RPC_TIMEOUT;
+  // an error of the card (IO) or a busy firmware: a few more tries before the defaults
+  for (int t = 0; t < 5; t++) {
+    st = rpc_call(RPC_CFG, 0, req, (uint16_t) (p - req), buf, sizeof(buf), &n, timeout_ms);
+    if (st == RPC_OK || st == RPC_TIMEOUT || st == RPC_ARGS || st == RPC_DENIED) break;
+    uint32_t t0 = R_MS;
+    while (R_MS - t0 < 300) ;
+  }
+  if (st != RPC_OK) {
+    char b[40], *e = str_cpy(b, "menu: CFG GET status "); e = u2s(e, (uint32_t) st, 1); str_cpy(e, "\n");
+    dbg_puts(b);
+    return -1;
+  }
   const uint8_t *q = buf, *end = buf + n;
   for (int k = from; k < id; k++) {
     vals[k][0] = 0;
@@ -168,7 +181,12 @@ static void core_find(void) {
 void settings_read(void) {
   static char vals[S_COUNT][40];
   for (int id = 0; id < S_COUNT; id++) { set_val[id] = settings[id].def; vals[id][0] = 1; }
-  for (int id = 0; id >= 0 && id < S_COUNT; ) id = cfg_get_many(id, vals);
+  // the first GET waits long: back from a core (Ctrl+Alt+Backspace) the firmware reads the core list of the
+  // card after the load of the boot core (core_list_return()) and answers no RPC meanwhile, seconds with
+  // many cores; a timeout here left all the settings at the defaults (the theme, 640 x 480)
+  int id = 0;
+  while (id >= 0 && id < S_COUNT) id = cfg_get_many(id, vals, id == 0 ? 15000 : 2000);
+  if (id < 0) dbg_puts("menu: CFG GET failed, defaults\n");
   set_core[0] = 0;
   for (int id = 0; id < S_COUNT; id++) {
     const setting_t *s = &settings[id];
