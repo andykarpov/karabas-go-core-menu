@@ -249,7 +249,7 @@ static void draw_all(void) {
   str_cpy(p, fw_build);
   ramp_t copy = gfx_ramp_alpha(look.copyright);
   gfx_text_center(&f27, 112, FB_H - 40, b, copy);
-  gfx_text_center(&f27, 112, FB_H - 20, "(c) 2026 andykarpov", copy);
+  gfx_text_center(&f27, 112, FB_H - 20, "\u00A9 2026 andykarpov", copy);
   draw_character();
   draw_clock();
   draw_page();
